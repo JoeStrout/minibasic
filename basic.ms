@@ -22,7 +22,7 @@ keywords = "PRINT GOTO IF THEN FOR END LET".split +
   "HOME SWEET".split +
   "NEW LIST".split
 
-operators = "EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^ ( )".split
+operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
 
 // tokenize: take the given line af BASIC code and return a 
 // list of tokens.  Numbers will be actual numbers in the token
@@ -56,6 +56,12 @@ tokenize = function(line)
 			if keywords.contains(upperTok) then tok = upperTok
 			tokens.push tok
 			p0 = p1
+			if tok == "REM" then
+				// special case: rest of the line is a remark
+				if p0 < lineLen and line[p0] == " " then p0 += 1
+				if p0 < lineLen then tokens.push line[p0:]
+				p0 = lineLen
+			end if
 		else if c == """" then
 			// lex a quoted string literal
 			p1 = p0 + 1
@@ -132,8 +138,7 @@ evalTokens = function(tokens)
 		else if op == "NOT" then
 			stack.push (opA == 0)
 		else
-			print "Unknown operator: " + op
-			exit
+			return printErr("Unknown operator: " + op)
 		end if
 //		print "Applied " + op + " to " + opA + " and " + opB + " to get " + stack[-1]
 	end function
@@ -142,7 +147,24 @@ evalTokens = function(tokens)
 	tokensLen = tokens.len
 	while pos < tokensLen
 		tok = tokens[pos]
-		if tok isa number then
+//		print stack + " <-- " + tok
+		if tok == "(" then
+			stack.push tok
+		else if tok == ")" then
+			// collapse stack back to opening "("
+			while stack
+				if stack[-1] == "(" then
+					stack.pop
+					break
+				else if stack.len > 1 and stack[-2] == "(" then
+					stack.remove -2
+					break
+				else if stack.len < 3 then
+					return printErr("unmatched parentheses")
+				end if
+				doOneOp
+			end while
+		else if tok isa number then
 			// push a numeric operand
 			stack.push tok
 		else if tok[0] == """" then
@@ -164,7 +186,7 @@ evalTokens = function(tokens)
 		else
 			// push the value of identifier
 			if not vars.hasIndex(tok) then
-				return printError("undefined identifier: " + tok)
+				return printErr("undefined identifier: " + tok)
 			end if
 			stack.push vars[tok]
 		end if
@@ -177,23 +199,18 @@ evalTokens = function(tokens)
 	return stack[0]
 end function
 
-splitOnCommaOrSemicolon = function(tokens)
-	result = []
-	p0 = 0
-	while p0 < tokens.len
-		p1 = p0
-		while true
-			if p1 >= tokens.len or tokens[p1] == "," or tokens[p1] == ";" then
-				result.push tokens[p0:p1]
-				if p1 < tokens.len then result.push tokens[p1]
-				break
-			end if
-			p1 += 1
-		end while
-		p0 = p1 + 1
-	end while
-	if p0 < tokens.len then result.push tokens[p0:]
-	return result
+// indexOfAny: return the smallest index of any of the options;
+// or if none are found, return the given default.
+list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
+	bestResult = null
+	for opt in options
+		idx = self.indexOf(opt, startIdx)
+		if idx != null and (bestResult == null or idx < bestResult) then
+			bestResult = idx
+		end if
+	end for
+	if bestResult != null then return bestResult
+	return defaultIfNotFound
 end function
 
 printErr = function(err)
@@ -209,20 +226,19 @@ execLine = function(tokens)
 	cmd = tokens[0]
 	if cmd == "PRINT" then
 		// print a series of expressions, separated by , or ;
-		series = splitOnCommaOrSemicolon(tokens[1:])
+		pos = 1
 		needEOL = true
-		i = 0; while i < series.len
-			value = evalTokens(series[i])
+		while pos < tokens.len
+			endPos = tokens.indexOfAny(",;", pos, tokens.len)
+			value = evalTokens(tokens[pos:endPos])
 			print value, ""
-			if i+1 < series.len then
-				if series[i+1] == "," then
-					print " ", ""
-				end if
+			if endPos < tokens.len then
+				if tokens[endPos] == "," then print " ", ""
 				needEOL = false
 			else
 				needEOL = true
 			end if
-			i += 2
+			pos = endPos + 1
 		end while
 		if needEOL then print
 	else if cmd == "GOTO" then
@@ -252,7 +268,7 @@ execLine = function(tokens)
 		vars[tokens[0]] = evalTokens(tokens[2:])	
 	else if cmd == "CLEAR" then
 		globals.vars = {}
-	else if cmd == "HOME" then
+	else if cmd == "HOME" then	// or CLS?
 		clear
 		text.row = 26
 		text.color = "#00CC00FF"
@@ -260,6 +276,8 @@ execLine = function(tokens)
 		gfx.clear color.black
 	else if cmd == "END" then
 		globals.halt = true
+	else if cmd == "REM" then
+		// no action needed
 	else
 		print "Unknown command: " + cmd
 	end if
@@ -283,8 +301,11 @@ repl = function(line)
 		end if
 	else if cmd == "NEW" then
 		globals.program = {}
+		globals.vars = {}
 	else if cmd == "LIST" then
 		listProgram
+	else if cmd == "LISTREM" then	// why didn't anyone else think of this?
+		listProgram true
 	else if cmd == "RUN" then
 		runProgram
 	else
@@ -292,11 +313,13 @@ repl = function(line)
 	end if
 end function
 
-listProgram = function
+listProgram = function(remarksOnly = false)
 	lineNums = program.indexes
 	lineNums.sort
 	for lineNum in lineNums
-		print lineNum + " " + program[lineNum].join(" ")
+		tokens = program[lineNum]
+		if remarksOnly and tokens[0] != "REM" then continue
+		print lineNum + " " + tokens.join(" ")
 	end for
 end function
 
@@ -347,6 +370,7 @@ repl "10 if 2+2 = 4 AND 3+3 = 6 then 30"
 repl "20 ? ""math is broken"""
 repl "25 end"
 repl "30 ? ""math works!"""
+repl "5 REM This is just a little test program."
 repl "list"
 
 basic = function
