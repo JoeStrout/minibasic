@@ -18,11 +18,11 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT GOTO IF THEN FOR END".split +
+keywords = "PRINT GOTO IF THEN FOR END LET".split +
   "HOME SWEET".split +
   "NEW LIST".split
 
-operators = "EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
+operators = "EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^ ( )".split
 
 // tokenize: take the given line af BASIC code and return a 
 // list of tokens.  Numbers will be actual numbers in the token
@@ -148,7 +148,7 @@ evalTokens = function(tokens)
 		else if tok[0] == """" then
 			// push a string literal
 			stack.push tok[1:-1]
-		else
+		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
 			while stack.len >= 3
@@ -161,6 +161,12 @@ evalTokens = function(tokens)
 			// then push the new operator
 			stack.push tok
 			//print "Pushed operator: " + tok
+		else
+			// push the value of identifier
+			if not vars.hasIndex(tok) then
+				return printError("undefined identifier: " + tok)
+			end if
+			stack.push vars[tok]
 		end if
 		pos += 1
 	end while
@@ -190,6 +196,11 @@ splitOnCommaOrSemicolon = function(tokens)
 	return result
 end function
 
+printErr = function(err)
+	print "Error: " + err
+	globals.halt = true
+end function
+
 // execLine: execute one (already-tokenized) line of code.
 // Used both in immediate mode, and when running a program.
 // Note that the given tokens should NOT include a line number.
@@ -216,36 +227,37 @@ execLine = function(tokens)
 		if needEOL then print
 	else if cmd == "GOTO" then
 		if tokens.len != 2 or not (tokens[1] isa number) then
-			print "Error: line number required for GOTO"
-			globals.halt = true
-			return
+			return printErr("line number required for GOTO")
 		end if
 		globals.nextLine = tokens[1]
 	else if cmd == "IF" then
 		thenIdx = tokens.indexOf("THEN")
-		if thenIdx == null then
-			print "Error: THEN required after IF"
-			globals.halt = true
-			return
-		end if
-		if tokens.len != thenIdx + 2 then
-			print "Error: line number required after THEN"
-			globals.halt = true
-			return
-		end if
+		if thenIdx == null then return printErr("THEN required after IF")
+		if tokens.len != thenIdx + 2 then return printErr("line number required after THEN")
 		value = evalTokens(tokens[1:thenIdx])
 		if value != 0 then globals.nextLine = tokens[thenIdx+1]
+	else if cmd == "LET" then
+		if tokens.len < 4 or tokens[2] != "=" then return printErr("incomplete LET statement")
+		if tokens[1] isa number or tokens[1][0] == """" then
+			return printErr("can't assign to constant")
+		end if
+		if keywords.contains(tokens[1]) then return printErr("can't assign to keyword")
+		vars[tokens[1]] = evalTokens(tokens[3:])
+	else if not keywords.contains(cmd) and tokens.len > 2 and tokens[1] == "=" then
+		if tokens.len < 3 then return printErr("incomplete LET statement")
+		if tokens[0] isa number or tokens[0][0] == """" then
+			return printErr("can't assign to constant")
+		end if
+		if keywords.contains(tokens[0]) then return printErr("can't assign to keyword")
+		vars[tokens[0]] = evalTokens(tokens[2:])	
+	else if cmd == "CLEAR" then
+		globals.vars = {}
 	else if cmd == "HOME" then
 		clear
 		text.row = 26
 		text.color = "#00CC00FF"
 		text.backColor = color.clear
 		gfx.clear color.black
-	else if cmd == "SWEET" then
-		print "HOME ", ""
-		wait 0.1
-		print "SWEET ", ""
-		wait 0.1
 	else if cmd == "END" then
 		globals.halt = true
 	else
@@ -308,6 +320,7 @@ end function
 
 // Machine State:
 program = {}		// key: line number; value: tokens
+vars = {}			// key: identifier; value: value
 
 runUnitTests = function
 	errorCount = 0
