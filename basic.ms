@@ -18,7 +18,7 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT GOTO IF THEN FOR END LET".split +
+keywords = "PRINT GOTO IF THEN FOR TO NEXT END LET".split +
   "HOME SWEET".split +
   "NEW LIST".split
 
@@ -185,10 +185,10 @@ evalTokens = function(tokens)
 			//print "Pushed operator: " + tok
 		else
 			// push the value of identifier
-			if not vars.hasIndex(tok) then
+			if not machine.vars.hasIndex(tok) then
 				return printErr("undefined identifier: " + tok)
 			end if
-			stack.push vars[tok]
+			stack.push machine.vars[tok]
 		end if
 		pos += 1
 	end while
@@ -211,6 +211,12 @@ list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
 	end for
 	if bestResult != null then return bestResult
 	return defaultIfNotFound
+end function
+
+isIdentifier = function(s)
+	if s isa number or not s then return false
+	if keywords.contains(s) then return false
+	return isIdentifierChar(s[0])
 end function
 
 printErr = function(err)
@@ -245,29 +251,55 @@ execLine = function(tokens)
 		if tokens.len != 2 or not (tokens[1] isa number) then
 			return printErr("line number required for GOTO")
 		end if
-		globals.nextLine = tokens[1]
+		machine.goTo tokens[1]
 	else if cmd == "IF" then
 		thenIdx = tokens.indexOf("THEN")
 		if thenIdx == null then return printErr("THEN required after IF")
 		if tokens.len != thenIdx + 2 then return printErr("line number required after THEN")
 		value = evalTokens(tokens[1:thenIdx])
-		if value != 0 then globals.nextLine = tokens[thenIdx+1]
+		if value != 0 then machine.goTo tokens[thenIdx+1]
 	else if cmd == "LET" then
 		if tokens.len < 4 or tokens[2] != "=" then return printErr("incomplete LET statement")
 		if tokens[1] isa number or tokens[1][0] == """" then
 			return printErr("can't assign to constant")
 		end if
 		if keywords.contains(tokens[1]) then return printErr("can't assign to keyword")
-		vars[tokens[1]] = evalTokens(tokens[3:])
+		machine.vars[tokens[1]] = evalTokens(tokens[3:])
 	else if not keywords.contains(cmd) and tokens.len > 2 and tokens[1] == "=" then
 		if tokens.len < 3 then return printErr("incomplete LET statement")
 		if tokens[0] isa number or tokens[0][0] == """" then
 			return printErr("can't assign to constant")
 		end if
 		if keywords.contains(tokens[0]) then return printErr("can't assign to keyword")
-		vars[tokens[0]] = evalTokens(tokens[2:])	
+		machine.vars[tokens[0]] = evalTokens(tokens[2:])
+	else if cmd == "FOR" then
+		if tokens.len < 6 or tokens[2] != "=" then return printErr("incomplete FOR statement")
+		if not isIdentifier(tokens[1]) then return printErr("invalid FOR loop variable")
+		toPos = tokens.indexOf("TO")
+		if toPos == null then return printErr("incomplete FOR statement")
+		stepPos = tokens.indexOf("STEP"); if stepPos == null then stepPos = tokens.len
+		var = tokens[1]
+		fromVal = evalTokens(tokens[3:toPos])
+		toVal = evalTokens(tokens[toPos+1:stepPos])
+		step = 1
+		if stepPos < tokens.len then step = evalTokens(tokens[stepPos:])
+		// ToDo: ensure we aren't already looping with this variable
+		machine.vars[var] = fromVal
+		machine.forLoops.push ForLoopState.make(var, step, toVal)
+		machine.forLoops[-1].topLineNum = machine.pc + 1
+	else if cmd == "NEXT" then
+		// ToDo: handle NEXT arguments (one or more variable names)
+		if not machine.forLoops then return printErr("NEXT without FOR")
+		fls = machine.forLoops[-1]
+		machine.vars[fls.var] += fls.step
+		if fls.step > 0 and machine.vars[fls.var] > fls.limit or
+		   fls.step < 0 and machine.vars[fls.var] < fls.limit then
+			machine.forLoops.pop
+		else
+			machine.nextPc = fls.topLineNum	// ToDo: and statement
+		end if
 	else if cmd == "CLEAR" then
-		globals.vars = {}
+		machine.vars = {}
 	else if cmd == "HOME" then	// or CLS?
 		clear
 		text.row = 26
@@ -275,7 +307,7 @@ execLine = function(tokens)
 		text.backColor = color.clear
 		gfx.clear color.black
 	else if cmd == "END" then
-		globals.halt = true
+		machine.halt = true
 	else if cmd == "REM" then
 		// no action needed
 	else
@@ -295,13 +327,12 @@ repl = function(line)
 	if cmd isa number then
 		lineNum = cmd
 		if tokens.len == 1 then
-			program.remove lineNum
+			machine.program.remove lineNum
 		else
-			program[lineNum] = tokens[1:]
+			machine.program[lineNum] = tokens[1:]
 		end if
 	else if cmd == "NEW" then
-		globals.program = {}
-		globals.vars = {}
+		machine.reset
 	else if cmd == "LIST" then
 		listProgram
 	else if cmd == "LISTREM" then	// why didn't anyone else think of this?
@@ -314,36 +345,73 @@ repl = function(line)
 end function
 
 listProgram = function(remarksOnly = false)
-	lineNums = program.indexes
-	lineNums.sort
-	for lineNum in lineNums
-		tokens = program[lineNum]
+	machine.sortLines
+	for lineNum in machine.lineNums
+		tokens = machine.program[lineNum]
 		if remarksOnly and tokens[0] != "REM" then continue
 		print lineNum + " " + tokens.join(" ")
 	end for
 end function
 
 runProgram = function
-	lineNums = program.indexes
-	lineNums.sort
-	lineNumIdx = 0
-	globals.halt = false
-	while not halt
-		globals.nextLine = null
-		execLine program[lineNums[lineNumIdx]]
-		if not nextLine then
-			lineNumIdx += 1
-			if lineNumIdx >= lineNums.len then break
+	machine.sortLines
+	machine.halt = false
+	machine.pc = 0
+	while not machine.halt
+		machine.nextPc = null
+//		print "[" + machine.lineNums[machine.pc] + "] ", ""
+		execLine machine.program[machine.lineNums[machine.pc]]
+		if not machine.nextPc then
+			machine.pc += 1
+			if machine.pc >= machine.lineNums.len then break
 //			print "Advancing to line index " + lineNumIdx + ", which is " + lineNums[lineNumIdx]
 		else
-			lineNumIdx = lineNums.indexOf(nextLine)
+			machine.pc = machine.nextPc
 		end if		
 	end while
 end function
 
+ForLoopState = {}
+ForLoopState.var = ""
+ForLoopState.topLineNum = 0
+ForLoopState.topStatementNum = 0
+ForLoopState.step = 1
+ForLoopState.limit = 0
+ForLoopState.make = function(var, step, limit)
+	fls = new ForLoopState
+	fls.var = var
+	fls.step = step
+	fls.limit = limit
+	return fls
+end function
+
 // Machine State:
-program = {}		// key: line number; value: tokens
-vars = {}			// key: identifier; value: value
+MachineState = {}
+MachineState.program = {}		// key: line number; value: tokens
+MachineState.lineNums = []		// sorted list of line numbers
+MachineState.pc = 0				// index into lineNums for current line
+MachineState.nextPc = 0			// index into lineNum for next line
+MachineState.vars = {}			// key: identifier; value: value
+MachineState.forLoops = []		// list of ForLoopState objects
+MachineState.halt = false		// flag to cause program to stop
+MachineState.sortLines = function
+	self.lineNums = self.program.indexes
+	self.lineNums.sort
+end function
+MachineState.goTo = function(lineNum)
+	self.nextPc = self.lineNums.indexOf(lineNum)
+	if self.nextPc == null then
+		printErr "Invalid line number: " + lineNum
+	end if
+end function
+MachineState.reset = function
+	self.program = {}
+	self.lineNums = []
+	self.pc = 0
+	self.vars = {}
+	self.forLoops = []
+end function
+machine = new MachineState
 
 runUnitTests = function
 	errorCount = 0
@@ -371,6 +439,9 @@ repl "20 ? ""math is broken"""
 repl "25 end"
 repl "30 ? ""math works!"""
 repl "5 REM This is just a little test program."
+repl "50 for i = 1 to 4"
+repl "60 print i"
+repl "70 next"
 repl "list"
 
 basic = function
