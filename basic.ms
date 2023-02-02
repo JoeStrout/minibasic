@@ -18,7 +18,7 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT GOTO IF THEN FOR TO NEXT END LET".split +
+keywords = "PRINT GOTO IF THEN FOR TO STEP NEXT END LET".split +
   "HOME SWEET".split +
   "NEW LIST".split
 
@@ -93,6 +93,7 @@ end function
 // evalTokens: evaluate a tokenized expression.
 //  For example, given [6, "*", 7], return 42.
 evalTokens = function(tokens)
+//	print "evalTokens(" + tokens + ")"
 	stack = []
 	
 	doOneOp = function
@@ -282,7 +283,10 @@ execLine = function(tokens)
 		fromVal = evalTokens(tokens[3:toPos])
 		toVal = evalTokens(tokens[toPos+1:stepPos])
 		step = 1
-		if stepPos < tokens.len then step = evalTokens(tokens[stepPos:])
+		if stepPos < tokens.len then
+			if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
+			step = evalTokens(tokens[stepPos+1:])
+		end if
 		// ToDo: ensure we aren't already looping with this variable
 		machine.vars[var] = fromVal
 		machine.forLoops.push ForLoopState.make(var, step, toVal)
