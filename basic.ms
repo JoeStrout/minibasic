@@ -377,6 +377,20 @@ repl = function(line)
 		listProgram true
 	else if cmd == "RUN" then
 		runProgram
+	else if cmd == "CAT" then
+		dir
+	else if cmd == "LOAD" then
+		name = line[4:].trim + ".bas"
+		lines = file.readLines(name)
+		if lines == null then
+			print "Unable to read program " + name
+		else
+			machine.reset
+			for line in lines
+				repl line
+			end for
+			print machine.program.len + " lines loaded from " + name
+		end if
 	else
 		execLine tokens
 	end if
@@ -486,10 +500,12 @@ repl "list"
 
 basic = function
 	reset
-	load "basic"
+	load "/usr/basic"
 	run
 end function
 _savedGlobals.basic = @basic
+
+cd "/usr/programs"
 
 while true
 	line = input(">")
