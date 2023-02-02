@@ -83,6 +83,18 @@ tokenize = function(line)
 			p0 += 1
 		end if
 	end while
+	if tokens.len > 1 then
+		// As a final pass, check for "-" before a number and after anything
+		// except an identifier or number.  In that case, combine it with the
+		// number (making it negative).
+		for i in range(tokens.len-2, 0)
+			if tokens[i] == "-" and tokens[i+1] isa number and
+			  not (i > 0 and (tokens[i-1] isa number or isIdentifier(tokens[i-1]))) then
+				tokens[i+1] = -tokens[i+1]
+				tokens.remove i
+			end if
+		end for
+	end if
 	return tokens
 end function
 
@@ -428,7 +440,9 @@ runUnitTests = function
 
 	assertEqual tokenize("10print""Hello""+42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("10 ?""Hello""  +   42"), [10, "PRINT", """Hello""", "+", 42]
-
+	assertEqual tokenize("5-2"), [5, "-", 2]
+	assertEqual tokenize("5*-2"), [5, "*", -2]
+	assertEqual tokenize("5--2"), [5, "-", -2]	
 end function
 
 
