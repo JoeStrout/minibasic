@@ -53,7 +53,7 @@ tokenize = function(line)
 			end while
 			tok = line[p0:p1]
 			upperTok = tok.upper
-			if keywords.contains(upperTok) then tok = upperTok
+			if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
 			tokens.push tok
 			p0 = p1
 			if tok == "REM" then
@@ -79,8 +79,13 @@ tokenize = function(line)
 			p0 += 1
 		else
 			// unknown -- maybe an operator?
-			tokens.push line[p0]
-			p0 += 1
+			if p0+1 < lineLen and operators.contains(line[p0:p0+2]) then
+				tokens.push line[p0:p0+2]
+				p0 += 2
+			else
+				tokens.push line[p0]
+				p0 += 1
+			end if
 		end if
 	end while
 	if tokens.len > 1 then
@@ -108,7 +113,7 @@ evalTokens = function(tokens)
 //	print "evalTokens(" + tokens + ")"
 	stack = []
 	
-	doOneOp = function
+	doBinop = function
 		opB = stack.pop
 		op = stack.pop
 		opA = stack.pop		
@@ -148,12 +153,21 @@ evalTokens = function(tokens)
 			stack.push (opA != 0) or (opB != 0)
 		else if op == "AND" then
 			stack.push (opA != 0) and (opB != 0)
-		else if op == "NOT" then
-			stack.push (opA == 0)
 		else
 			return printErr("Unknown operator: " + op)
 		end if
 //		print "Applied " + op + " to " + opA + " and " + opB + " to get " + stack[-1]
+	end function
+	
+	doUnaryOp = function
+		opA = stack.pop
+		op = stack.pop
+		if op == "-" then
+			stack.push -opA
+		else if op == "NOT" then
+			stack.push not (opA != 0)
+		end if
+//		print "Applied " + op + " to " + opA + " to get " + stack[-1]
 	end function
 	
 	pos = 0
@@ -180,6 +194,7 @@ evalTokens = function(tokens)
 		else if tok isa number then
 			// push a numeric operand
 			stack.push tok
+			if stack.len > 1 and stack[-2] == "-" then doUnaryOp
 		else if tok[0] == """" then
 			// push a string literal
 			stack.push tok[1:-1]
@@ -191,7 +206,7 @@ evalTokens = function(tokens)
 				prevOpIdx = -1
 				if stack.len > 1 then prevOpIdx = operators.indexOf(stack[-2])
 				if opIdx > prevOpIdx then break
-				doOneOp
+				doBinop
 			end while
 			// then push the new operator
 			stack.push tok
@@ -202,12 +217,19 @@ evalTokens = function(tokens)
 				return printErr("undefined identifier: " + tok)
 			end if
 			stack.push machine.vars[tok]
+			if stack.len > 1 and stack[-2] == "-" then doUnaryOp
 		end if
 		pos += 1
 	end while
 	// finally, collapse the stack (which should be in precedence order)
-	while stack.len >= 3
-		doOneOp
+	while stack.len > 1
+		if stack[-2] == "NOT" then
+			doUnaryOp
+		else if stack.len > 2 then
+			doBinop
+		else
+			break
+		end if
 	end while
 	return stack[0]
 end function
