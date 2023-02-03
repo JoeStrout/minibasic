@@ -49,3 +49,11 @@ This is a little project to create an interpreter for the BASIC programming lang
 Include in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine.  None of these work yet, because they all use at least the `TAB` function, which is not yet supported.
 
 So the first goal is to get these programs working.  Then we'll add some more extensions to support graphics and sound, and we'll really have a cool BASIC environment!
+
+## References
+
+Detailed references on various old BASIC dialects can be hard to find.  But here are some:
+
+- [Applesoft BASIC](https://www.calormen.com/jsbasic/reference.html)
+- [Microsoft BASIC-80](https://usermanual.wiki/Document/BASIC8028MBASIC29ReferenceManual.204768585/view)
+- [Commodore-BASIC V2.0](https://www.c64-wiki.com/wiki/C64-Commands)
