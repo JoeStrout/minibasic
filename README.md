@@ -4,6 +4,8 @@
 
 This is a little project to create an interpreter for the BASIC programming language for Mini Micro.  The interpreter itself is written in [MiniScript](https://miniscript.org).
 
+**NOTE:** This project requires MiniScript v1.6, coming in Mini Micro v1.2 (not yet officially released).
+
 ## Features Implemented ##
 
 - immediate-mode commands like `PRINT 6*7` (or equivalent shorthand, `?6*7`)
@@ -61,3 +63,4 @@ Detailed references on various old BASIC dialects can be hard to find.  But here
 - [Applesoft BASIC](https://www.calormen.com/jsbasic/reference.html)
 - [Microsoft BASIC-80](https://usermanual.wiki/Document/BASIC8028MBASIC29ReferenceManual.204768585/view)
 - [Commodore-BASIC V2.0](https://www.c64-wiki.com/wiki/C64-Commands)
+- [Classic Usborne BASIC Programming Books](https://usborne.com/us/books/computer-and-coding-books)
