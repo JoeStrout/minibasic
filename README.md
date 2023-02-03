@@ -18,6 +18,7 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `LOAD` _program name_ (e.g. `LOAD dice`)
 - standard BASIC commands:
   - `PRINT` (or `?` for short), with `,` and `;`
+  - `INPUT` (without prompt)
   - `GOTO`
   - `IF` _condition_ `THEN` (with a line number)
   - `LET` (optional; `X = 42` also works without `LET`)
@@ -25,6 +26,11 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `NEXT` (note: not yet supporting a variable name)
   - `END`
   - `REM`
+- standard(ish) BASIC functions:
+  - `INT`
+  - `ABS`
+  - `RND` (parameter ignored; returns random number 0-1)
+  - `TAB` (sets horizontal cursor position, then returns "")
 - nonstandard BASIC commands:
   - `CLEAR` (resets all variables)
   - `HOME` (clears the screen and resets the cursor)
@@ -36,17 +42,15 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `RENAME`
   - `RENUMBER`
 - support for multiple statements on one line, separated by `:`
-- support for functions of any type (inc. RND, TAB, etc.)
 - support for arrays
 - distinction between string and numeric variables
 - standard BASIC commands:
   - `DATA` and `READ`
   - `GOSUB` and `RETURN`
-  - `INPUT`
 
 ## Sample Programs
 
-Include in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine.  None of these work yet, because they all use at least the `TAB` function, which is not yet supported.
+Include in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine.  None of these work yet, though some of them (like "chemist") are getting close.
 
 So the first goal is to get these programs working.  Then we'll add some more extensions to support graphics and sound, and we'll really have a cool BASIC environment!
 

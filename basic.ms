@@ -18,7 +18,7 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT GOTO IF THEN FOR TO STEP NEXT END LET".split +
+keywords = "PRINT INPUT GOTO IF THEN FOR TO STEP NEXT END LET".split +
   "HOME SWEET".split +
   "NEW LIST".split
 
@@ -40,7 +40,7 @@ tokenize = function(line)
 		else if c >= "0" and c <= "9" then
 			// lex a number
 			p1 = p0 + 1
-			while p1 < lineLen and isNumericChar(line[p1])
+			while p1 < lineLen and (isNumericChar(line[p1]) or line[p1] == ".")
 				p1 += 1
 			end while
 			tokens.push line[p0:p1].val
@@ -91,12 +91,16 @@ tokenize = function(line)
 	if tokens.len > 1 then
 		// As a final pass, check for "-" before a number and after anything
 		// except an identifier or number.  In that case, combine it with the
-		// number (making it negative).
+		// number (making it negative).  Also, combine '(' with a previous
+		// identifier (this is a function call).
 		for i in range(tokens.len-2, 0)
 			if tokens[i] == "-" and tokens[i+1] isa number and
 			  not (i > 0 and (tokens[i-1] isa number or isIdentifier(tokens[i-1]))) then
 				tokens[i+1] = -tokens[i+1]
 				tokens.remove i
+			else if tokens[i+1] == "(" and isIdentifier(tokens[i]) then
+				tokens[i] = tokens[i].upper + "("
+				tokens.remove i+1
 			end if
 		end for
 	end if
@@ -175,7 +179,7 @@ evalTokens = function(tokens)
 	while pos < tokensLen
 		tok = tokens[pos]
 //		print stack + " <-- " + tok
-		if tok == "(" then
+		if tok isa string and tok.endsWith("(") then
 			stack.push tok
 		else if tok == ")" then
 			// collapse stack back to opening "("
@@ -186,10 +190,19 @@ evalTokens = function(tokens)
 				else if stack.len > 1 and stack[-2] == "(" then
 					stack.remove -2
 					break
+				else if stack.len > 1 and stack[-2] isa string and stack[-2].endsWith("(") then
+					funcName = stack[-2][:-1]
+					stack.remove -2
+					if not machine.fn.hasIndex(funcName) then
+						return printErr("unknown function " + funcName)
+					end if
+					f = @machine.fn[funcName]
+					stack[-1] = f(stack[-1])
+					break
 				else if stack.len < 3 then
 					return printErr("unmatched parentheses")
 				end if
-				doOneOp
+				doBinop
 			end while
 		else if tok isa number then
 			// push a numeric operand
@@ -256,7 +269,7 @@ end function
 
 printErr = function(err)
 	print "Error: " + err
-	globals.halt = true
+	machine.halt = true
 end function
 
 // execLine: execute one (already-tokenized) line of code.
@@ -282,6 +295,17 @@ execLine = function(tokens)
 			pos = endPos + 1
 		end while
 		if needEOL then print
+	else if cmd == "INPUT" then
+		var = null
+		if tokens.len > 1 then
+			var = tokens[1]
+			if not isIdentifier(var) then return printErr("invalid identifier for INPUT")
+		end if
+		value = input
+		if var then
+			if var[-1] != "$" then value = value.val
+			machine.vars[var] = value
+		end if
 	else if cmd == "GOTO" then
 		if tokens.len != 2 or not (tokens[1] isa number) then
 			return printErr("line number required for GOTO")
@@ -316,7 +340,7 @@ execLine = function(tokens)
 		var = tokens[1]
 		fromVal = evalTokens(tokens[3:toPos])
 		toVal = evalTokens(tokens[toPos+1:stepPos])
-		step = 1
+		if fromVal >= toVal then step = 1 else step = -1
 		if stepPos < tokens.len then
 			if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
 			step = evalTokens(tokens[stepPos+1:])
@@ -446,6 +470,22 @@ MachineState.nextPc = 0			// index into lineNum for next line
 MachineState.vars = {}			// key: identifier; value: value
 MachineState.forLoops = []		// list of ForLoopState objects
 MachineState.halt = false		// flag to cause program to stop
+
+MachineState.fn = {}
+MachineState.fn.RND = function(x)
+	return rnd
+end  function
+MachineState.fn.INT = function(x)
+	return int(x)
+end function
+MachineState.fn.ABS = function(x)
+	return abs(x)
+end function
+MachineState.fn.TAB = function(x)
+	text.column = x
+	return ""
+end function
+
 MachineState.sortLines = function
 	self.lineNums = self.program.indexes
 	self.lineNums.sort
@@ -478,7 +518,8 @@ runUnitTests = function
 	assertEqual tokenize("10 ?""Hello""  +   42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("5-2"), [5, "-", 2]
 	assertEqual tokenize("5*-2"), [5, "*", -2]
-	assertEqual tokenize("5--2"), [5, "-", -2]	
+	assertEqual tokenize("5--2"), [5, "-", -2]
+	assertEqual tokenize("INT (6 * RND(1))"), ["INT(", 6, "*", "RND(", 1, ")", ")"]
 end function
 
 
