@@ -184,6 +184,7 @@ evalTokens = function(tokens)
 		else if tok == ")" then
 			// collapse stack back to opening "("
 			while stack
+//				print "Collapsing from (): " + stack
 				if stack[-1] == "(" then
 					stack.pop
 					break
@@ -207,7 +208,12 @@ evalTokens = function(tokens)
 		else if tok isa number then
 			// push a numeric operand
 			stack.push tok
-			if stack.len > 1 and stack[-2] == "-" then doUnaryOp
+			if stack.len > 1 and stack[-2] == "-" and
+					(stack.len == 2 or (stack[-3] isa string and 
+					stack[-3].endsWith("("))) then
+//				print "Doing unary op on: " + stack
+				doUnaryOp
+			end if
 		else if tok[0] == """" then
 			// push a string literal
 			stack.push tok[1:-1]
@@ -227,10 +233,18 @@ evalTokens = function(tokens)
 		else
 			// push the value of identifier
 			if not machine.vars.hasIndex(tok) then
-				return printErr("undefined identifier: " + tok)
+				// old BASICS assume a null value for undefined variables
+				if tok.endsWith("$") then value = "" else value = 0
+			else
+				value = machine.vars[tok]
 			end if
-			stack.push machine.vars[tok]
-			if stack.len > 1 and stack[-2] == "-" then doUnaryOp
+			stack.push value
+			if stack.len > 1 and stack[-2] == "-" and
+					(stack.len == 2 or (stack[-3] isa string and 
+					stack[-3].endsWith("("))) then
+//				print "Doing unary op on: " + stack	// ToDo: DRY
+				doUnaryOp
+			end if
 		end if
 		pos += 1
 	end while
