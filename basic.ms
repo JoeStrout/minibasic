@@ -2,6 +2,8 @@
 
 import "stringUtil"
 import "listUtil"
+import "mapUtil"
+import "mathUtil"
 
 isNumericChar = function(c)
 	return (c >= "0" and c <= "9")
@@ -18,8 +20,8 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT INPUT GOTO IF THEN FOR TO STEP NEXT END LET".split +
-  "HOME SWEET".split +
+keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET".split +
+  "COLOR LINE PLOT".split +
   "NEW LIST".split
 
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -51,6 +53,7 @@ tokenize = function(line)
 			while p1 < lineLen and isIdentifierChar(line[p1])
 				p1 += 1
 			end while
+			if p1 < lineLen and line[p1] == "$" then p1 += 1
 			tok = line[p0:p1]
 			upperTok = tok.upper
 			if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
@@ -194,10 +197,10 @@ evalTokens = function(tokens)
 				else if stack.len > 1 and stack[-2] isa string and stack[-2].endsWith("(") then
 					funcName = stack[-2][:-1]
 					stack.remove -2
-					if not machine.fn.hasIndex(funcName) then
+					f = machine.fn.get(funcName)
+					if not @f then
 						return printErr("unknown function " + funcName)
 					end if
-					f = @machine.fn[funcName]
 					stack[-1] = f(stack[-1])
 					break
 				else if stack.len < 3 then
@@ -283,112 +286,8 @@ end function
 
 printErr = function(err)
 	print "Error: " + err
+	exit
 	machine.halt = true
-end function
-
-// execLine: execute one (already-tokenized) line of code.
-// Used both in immediate mode, and when running a program.
-// Note that the given tokens should NOT include a line number.
-execLine = function(tokens)
-	if not tokens then return
-	cmd = tokens[0]
-	if cmd == "PRINT" then
-		// print a series of expressions, separated by , or ;
-		pos = 1
-		needEOL = true
-		while pos < tokens.len
-			endPos = tokens.indexOfAny(",;", pos, tokens.len)
-			value = evalTokens(tokens[pos:endPos])
-			print value, ""
-			if endPos < tokens.len then
-				if tokens[endPos] == "," then print " ", ""
-				needEOL = false
-			else
-				needEOL = true
-			end if
-			pos = endPos + 1
-		end while
-		if needEOL then print
-	else if cmd == "INPUT" then
-		var = null
-		if tokens.len > 1 then
-			var = tokens[1]
-			if not isIdentifier(var) then return printErr("invalid identifier for INPUT")
-		end if
-		value = input
-		if var then
-			if var[-1] != "$" then value = value.val
-			machine.vars[var] = value
-		end if
-	else if cmd == "GOTO" then
-		if tokens.len != 2 or not (tokens[1] isa number) then
-			return printErr("line number required for GOTO")
-		end if
-		machine.goTo tokens[1]
-	else if cmd == "IF" then
-		thenIdx = tokens.indexOf("THEN")
-		if thenIdx == null then return printErr("THEN required after IF")
-		if tokens.len != thenIdx + 2 then return printErr("line number required after THEN")
-		value = evalTokens(tokens[1:thenIdx])
-		if value != 0 then machine.goTo tokens[thenIdx+1]
-	else if cmd == "LET" then
-		if tokens.len < 4 or tokens[2] != "=" then return printErr("incomplete LET statement")
-		if tokens[1] isa number or tokens[1][0] == """" then
-			return printErr("can't assign to constant")
-		end if
-		if keywords.contains(tokens[1]) then return printErr("can't assign to keyword")
-		machine.vars[tokens[1]] = evalTokens(tokens[3:])
-	else if not keywords.contains(cmd) and tokens.len > 2 and tokens[1] == "=" then
-		if tokens.len < 3 then return printErr("incomplete LET statement")
-		if tokens[0] isa number or tokens[0][0] == """" then
-			return printErr("can't assign to constant")
-		end if
-		if keywords.contains(tokens[0]) then return printErr("can't assign to keyword")
-		machine.vars[tokens[0]] = evalTokens(tokens[2:])
-	else if cmd == "FOR" then
-		if tokens.len < 6 or tokens[2] != "=" then return printErr("incomplete FOR statement")
-		if not isIdentifier(tokens[1]) then return printErr("invalid FOR loop variable")
-		toPos = tokens.indexOf("TO")
-		if toPos == null then return printErr("incomplete FOR statement")
-		stepPos = tokens.indexOf("STEP"); if stepPos == null then stepPos = tokens.len
-		var = tokens[1]
-		fromVal = evalTokens(tokens[3:toPos])
-		toVal = evalTokens(tokens[toPos+1:stepPos])
-		if fromVal >= toVal then step = 1 else step = -1
-		if stepPos < tokens.len then
-			if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
-			step = evalTokens(tokens[stepPos+1:])
-		end if
-		// ToDo: ensure we aren't already looping with this variable
-		machine.vars[var] = fromVal
-		machine.forLoops.push ForLoopState.make(var, step, toVal)
-		machine.forLoops[-1].topLineNum = machine.pc + 1
-	else if cmd == "NEXT" then
-		// ToDo: handle NEXT arguments (one or more variable names)
-		if not machine.forLoops then return printErr("NEXT without FOR")
-		fls = machine.forLoops[-1]
-		machine.vars[fls.var] += fls.step
-		if fls.step > 0 and machine.vars[fls.var] > fls.limit or
-		   fls.step < 0 and machine.vars[fls.var] < fls.limit then
-			machine.forLoops.pop
-		else
-			machine.nextPc = fls.topLineNum	// ToDo: and statement
-		end if
-	else if cmd == "CLEAR" then
-		machine.vars = {}
-	else if cmd == "HOME" then	// or CLS?
-		clear
-		text.row = 26
-		text.color = "#00CC00FF"
-		text.backColor = color.clear
-		gfx.clear color.black
-	else if cmd == "END" then
-		machine.halt = true
-	else if cmd == "REM" then
-		// no action needed
-	else
-		print "Unknown command: " + cmd
-	end if
 end function
 
 // repl: handle raw input from the user, which may be an 
@@ -414,7 +313,7 @@ repl = function(line)
 	else if cmd == "LISTREM" then	// why didn't anyone else think of this?
 		listProgram true
 	else if cmd == "RUN" then
-		runProgram
+		machine.runProgram
 	else if cmd == "CAT" then
 		dir
 	else if cmd == "LOAD" then
@@ -430,7 +329,7 @@ repl = function(line)
 			print machine.program.len + " lines loaded from " + name
 		end if
 	else
-		execLine tokens
+		machine.doImmediate tokens
 	end if
 end function
 
@@ -443,81 +342,379 @@ listProgram = function(remarksOnly = false)
 	end for
 end function
 
-runProgram = function
-	machine.sortLines
-	machine.halt = false
-	machine.pc = 0
-	while not machine.halt
-		machine.nextPc = null
-//		print "[" + machine.lineNums[machine.pc] + "] ", ""
-		execLine machine.program[machine.lineNums[machine.pc]]
-		if not machine.nextPc then
-			machine.pc += 1
-			if machine.pc >= machine.lineNums.len then break
-//			print "Advancing to line index " + lineNumIdx + ", which is " + lineNums[lineNumIdx]
-		else
-			machine.pc = machine.nextPc
-		end if		
-	end while
-end function
-
 ForLoopState = {}
 ForLoopState.var = ""
-ForLoopState.topLineNum = 0
-ForLoopState.topStatementNum = 0
 ForLoopState.step = 1
 ForLoopState.limit = 0
-ForLoopState.make = function(var, step, limit)
+ForLoopState.topLineIdx = 0
+ForLoopState.topTokenIdx = 0
+ForLoopState.make = function(var, limit, step, topLine, topToken)
 	fls = new ForLoopState
 	fls.var = var
 	fls.step = step
 	fls.limit = limit
+	fls.topLineIdx = topLine
+	fls.topTokenIdx = topToken
 	return fls
 end function
 
 // Machine State:
-MachineState = {}
-MachineState.program = {}		// key: line number; value: tokens
-MachineState.lineNums = []		// sorted list of line numbers
-MachineState.pc = 0				// index into lineNums for current line
-MachineState.nextPc = 0			// index into lineNum for next line
-MachineState.vars = {}			// key: identifier; value: value
-MachineState.forLoops = []		// list of ForLoopState objects
-MachineState.halt = false		// flag to cause program to stop
+Machine = {}
+Machine.program = {}		// key: line number; value: tokens
+Machine.lineNums = []		// sorted list of line numbers
+Machine.lineIdx = 0			// index into lineNums for current line
+Machine.tokenIdx = 0		// which token starts the current statement in that line
+Machine.nextLineIdx = 0		// index into lineNum for next line (if defined)
+Machine.vars = {}			// key: identifier; value: value
+Machine.forLoops = []		// list of ForLoopState objects
+Machine.halt = false		// flag to cause program to stop
+Machine.inThen = false		// true while in a THEN of an if statement
 
-MachineState.fn = {}
-MachineState.fn.RND = function(x)
-	return rnd
-end  function
-MachineState.fn.INT = function(x)
-	return int(x)
-end function
-MachineState.fn.ABS = function(x)
-	return abs(x)
-end function
-MachineState.fn.TAB = function(x)
-	text.column = x
+Machine.fn = {}
+Machine.fn.ABS = function(n); return abs(n); end function
+Machine.fn.ASC = function(s); return code(s); end function
+Machine.fn.ATN = function(n); return atan(n); end function
+Machine.fn["CHR$"] = function(n); return char(n); end function
+Machine.fn.COS = function(n); return cos(n); end function
+Machine.fn.EXP = function(n); return mathUtil.e ^ n; end function
+Machine.fn.FIX = function(n); return int(n); end function
+Machine.fn["INKEY$"] = function(z); return key.get; end function
+Machine.fn.INT = function(n); return floor(n); end function
+Machine.fn.LEN = function(s); return s.len; end function
+Machine.fn.LOG = function(n); return mathUtil.ln(n); end function
+Machine.fn.POS = function(z); return text.column; end function
+Machine.fn.RND = function(n); if n < 0 then rnd(n); return rnd; end  function
+Machine.fn.SGN = function(n); return sign(n); end function
+Machine.fn.SIN = function(n); return sin(n); end function
+Machine.fn["SPACES$"] = function(n); return " "*n; end function
+Machine.fn.SPC = function(n); print " "*n,""; return ""; end function
+Machine.fn.SQR = function(n); return sqrt(n); end function
+Machine.fn["STR$"] = function(n); return str(n); end function
+Machine.fn.TAB = function(n)
+	if n > text.column then print
+	text.column = n; 
 	return ""
 end function
+Machine.fn.TAN = function(n); return tan(n); end function
+Machine.fn.VAL = function(s); return val(s); end function
 
-MachineState.sortLines = function
+// Functions skipped for now -- maybe ToDo:
+// HEX$ (convert number to hex)
+// OCT$ (convert number to octal)
+// INPUT$ (from MBASIC-80)
+// INSTR (substring search)
+// LEFT$, MID$, RIGHT$
+// PEEK, POKE
+// STRING$
+
+
+palette = ("#000000 #FFFFFF #880000 #AAFFEE #CC44CC #00CC55 #0000AA #EEEE77 " +
+          "#DD8855 #664400 #FF7777 #333333 #777777 #AAFF66 #0088FF #BBBBBB").split
+
+Machine.cmd = {}
+
+Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
+	machine.vars = {}
+end function
+
+Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
+	globals.arg = evalTokens(tokens[startIdx+1:endIdx])
+	if arg isa number then
+		gfx.color = palette[arg % palette.len]
+	else if arg[0] == "#" then
+		gfx.color = arg
+	end if
+	text.color = gfx.color
+end function
+
+Machine.cmd.END = function(tokens, startIdx, endIdx)
+	machine.halt = true
+end function
+Machine.cmd.STOP = @Machine.cmd.END
+
+Machine.cmd.FOR = function(tokens, startIdx, endIdx)
+	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
+		return printErr("incomplete FOR statement 1")
+	end if
+	var = tokens[1]
+	if not isIdentifier(var) then return printErr("invalid FOR loop variable")
+	toPos = tokens.indexOf("TO", startIdx+3)
+	if toPos == null or toPos >= endIdx then return printErr("incomplete FOR statement 2")
+	stepPos = tokens.indexOf("STEP", startIdx+4)
+	if stepPos == null or stepPos > endIdx then stepPos = endIdx
+	fromVal = evalTokens(tokens[startIdx+3:toPos])
+	toVal = evalTokens(tokens[toPos+1:stepPos])
+	step = 1 // Too cool for BASIC: if fromVal >= toVal then step = 1 else step = -1
+	if stepPos < endIdx then
+		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement 3")
+		step = evalTokens(tokens[stepPos+1:endIdx])
+	end if
+	// ToDo: ensure we aren't already looping with this variable
+	machine.vars[var] = fromVal
+	if endIdx + 1 < tokens.len then
+		lineIdx = machine.lineIdx; tokenIdx = endIdx + 1
+	else
+		lineIdx = machine.lineIdx + 1; tokenIdx = 0
+	end if
+	machine.forLoops.push ForLoopState.make(var, toVal, step, lineIdx, tokenIdx)
+end function
+
+Machine.cmd.GOTO = function(tokens, startIdx, endIdx)
+	if endIdx != startIdx + 2 or not (tokens[1] isa number) then
+		return printErr("line number required for GOTO")
+	end if
+	machine.goTo tokens[startIdx+1]	
+end function
+
+Machine.cmd.HOME = function(tokens, startIdx, endIdx)
+		clear
+		text.row = 26
+		text.color = "#00CC00FF"
+		text.backColor = color.clear
+		gfx.clear color.black
+end function
+Machine.cmd.CLS = @Machine.cmd.HOME
+
+Machine.cmd.IF = function(tokens, startIdx, endIdx)
+	// This seems like a very tricky case, because of multiple statements
+	// per THEN and ELSE clause, and the possibility of nested IF-THEN-ELSE
+	// statements.  But it's not so bad.  The rules are:
+	//  1. If the condition is true, proceed to the nearest THEN,
+	// 	   and when we hit ELSE, skip to the next line.
+	//  2. If the condition is false, then find the matching ELSE
+	//	   token, discounting as many ELSEs as we see THENs on the way.
+
+	if endIdx >= tokens.len or tokens[endIdx] != "THEN" then	
+		return printErr("THEN required after IF")
+	end if
+	if tokens.len < endIdx + 2 then
+		return printErr("incomplete THEN clause")
+	end if
+	value = evalTokens(tokens[startIdx+1:endIdx])
+	if value != 0 then
+		// condition is true!  If THEN is followed by a number,
+		// treat it as a GoTo; otherwise jump to that statement.
+		machine.inThen = true
+		if tokens[endIdx+1] isa number then
+			machine.goTo tokens[endIdx+1]
+			return
+		else
+			return endIdx + 1
+		end if
+	else
+		// condition is false!  Find the matching ELSE clause, if any.
+		extraElses = 0
+		i = endIdx + 1
+		while i < tokens.len
+			if tokens[i] == "THEN" then extraElses += 1
+			if tokens[i] == "ELSE" then
+				extraElses -= 1
+				if extraElses < 0 then
+					// Found it!  If followed by a number,
+					// treat it as a GoTo; otherwise jump to that statement.
+					if tokens[i+1] isa number then
+						machine.goTo tokens[i+1]
+						return
+					else
+						return i+1
+					end if
+				end if
+			end if
+			i += 1
+		end while
+		// if we couldn't find a matching ELSE clause, then skip
+		// the rest of this line
+		return tokens.len
+	end if
+end function
+
+Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
+	var = null
+	if endIdx > startIdx + 1 then
+		var = tokens[startIdx + 1]
+		if not isIdentifier(var) then return printErr("invalid identifier for INPUT")
+	end if
+	value = input("?")
+	if var then
+		if var[-1] != "$" then value = value.val
+		machine.vars[var] = value
+	end if
+end function
+
+Machine.cmd.LET = function(tokens, startIdx, endIdx)
+	if tokens[startIdx] == "LET" then startIdx += 1  // (ignore LET)
+	if endIdx < startIdx+2 or 
+			tokens[startIdx+1] != "=" then return printErr("incomplete LET statement")
+	lvar = tokens[startIdx]
+	if lvar isa number or lvar[0] == """" then
+		return printErr("can't assign to constant")
+	end if
+	if keywords.contains(lvar) then return printErr("can't assign to keyword")
+	machine.vars[lvar] = evalTokens(tokens[startIdx+2:endIdx])
+end function
+
+Machine.cmd.LINE = function(tokens, startIdx, endIdx)
+	// ToDo: when we have functions that take multiple arguments (and
+	// so involve commas), we will need to change how this works.  We
+	// really need our expression parser to just grab all it can, and
+	// then return where it left off.
+	// But for now, a quick hack:
+	commaPos = tokens.indexOf(",", startIdx)
+	if commaPos == null or commaPos >= endIdx then
+		return printErr("Incomplete PLOT statement")
+	end if
+	x = evalTokens(tokens[startIdx+1:commaPos])
+	y = evalTokens(tokens[commaPos+1:endIdx])
+	gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color
+	machine.plotPos = [x,y]
+end function
+
+Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
+	// ToDo: handle NEXT arguments (one or more variable names)
+	if not machine.forLoops then return printErr("NEXT without FOR")
+	fls = machine.forLoops[-1]
+	machine.vars[fls.var] += fls.step
+	if fls.step > 0 and machine.vars[fls.var] > fls.limit or
+	   fls.step < 0 and machine.vars[fls.var] < fls.limit then
+		machine.forLoops.pop
+	else
+//		print "Sending machine to " + machine.lineNums[fls.topLineIdx] + " token " + fls.topTokenIdx
+		machine.nextLineIdx = fls.topLineIdx
+		return fls.topTokenIdx
+	end if	
+end function
+
+Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
+	// ToDo: when we have functions that take multiple arguments (and
+	// so involve commas), we will need to change how this works.  We
+	// really need our expression parser to just grab all it can, and
+	// then return where it left off.
+	// But for now, a quick hack:
+	commaPos = tokens.indexOf(",", startIdx)
+	if commaPos == null or commaPos >= endIdx then
+		return printErr("Incomplete PLOT statement")
+	end if
+	x = evalTokens(tokens[startIdx+1:commaPos])
+	y = evalTokens(tokens[commaPos+1:endIdx])
+	gfx.setPixel x, y, gfx.color
+	machine.plotPos = [x,y]
+end function
+
+Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
+	// print a series of expressions, separated by , or ;
+//	print "Printing " + tokens + " " + startIdx+":"+endIdx
+	pos = startIdx + 1
+	needEOL = true
+	while pos < endIdx
+		endPos = tokens.indexOfAny(",;", pos, tokens.len)
+		if endPos > endIdx then endPos = endIdx
+		value = evalTokens(tokens[pos:endPos])
+//		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
+		print value, ""
+		if endPos < endIdx then
+			if tokens[endPos] == "," then print " ", ""
+			needEOL = false
+		else
+			needEOL = true
+		end if
+		pos = endPos + 1
+	end while
+	if needEOL then print
+end function
+
+Machine.cmd.REM = function(tokens, startIdx, endIdx)
+	// no action needed!
+end function
+
+// Run one statement within the given set of tokens,
+// returning the token that starts the NEXT statement
+// within the same set, or null if there are no more.
+Machine.runOneStatement = function(tokens, startTokenIndex)
+	if startTokenIndex >= tokens.len then return null
+	cmd = tokens[startTokenIndex]
+	if isIdentifier(cmd) and startTokenIndex+1 < tokens.len and
+	  tokens[startTokenIndex+1] == "=" then cmd = "LET"
+	statementEnd = tokens.indexOfAny([":","THEN","ELSE"], startTokenIndex)
+	if statementEnd == null then statementEnd = tokens.len
+	f = self.cmd.get(cmd)
+//	print "calling cmd." + cmd + " with " + tokens + "[" + startTokenIndex + ":" + statementEnd + "]"
+	if @f then
+		// Most commands don't alter the next statement to run,
+		// but a few do.  Give each one a chance to return the
+		// next token index; but if they don't, just advance
+		// past the delimiter (unless it's ELSE).
+		nextStart = f(tokens, startTokenIndex, statementEnd)
+		if nextStart == null then
+			if statementEnd < tokens.len and tokens[statementEnd] == "ELSE" then
+				if not machine.inThen then return printErr("Unexpected ELSE")
+				nextStart = tokens.len
+			else
+				nextStart = statementEnd + 1
+			end if
+		end if
+		return nextStart
+	else
+		printErr "Unknown command: " + cmd
+		return null
+	end if
+end function
+
+Machine.doImmediate = function(tokens)
+	self.inThen = false
+	self.halt = false
+	self.tokenIdx = 0
+	self.lineIdx = null
+	while not self.halt and self.tokenIdx < tokens.len
+		self.nextLineIdx = null
+		self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
+		if self.lineIdx != null or self.nextLineIdx != null then break
+	end while
+end function
+
+Machine.runProgram = function
+	self.sortLines
+	self.halt = false
+	self.lineIdx = 0
+	self.inThen = false
+	while not self.halt and self.lineIdx < self.lineNums.len
+		tokens = self.program[self.lineNums[self.lineIdx]]
+		self.tokenIdx = 0
+		while not self.halt and self.tokenIdx < tokens.len
+			self.nextLineIdx = null
+			self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
+			if self.nextLineIdx != null then break
+		end while
+
+		if not self.nextLineIdx then
+			self.lineIdx += 1
+			if self.lineIdx >= self.lineNums.len then break
+//			print "Advancing to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
+		else
+			self.lineIdx = self.nextLineIdx
+//			print "Jumping to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
+		end if		
+	end while
+end function
+
+Machine.sortLines = function
 	self.lineNums = self.program.indexes
 	self.lineNums.sort
 end function
-MachineState.goTo = function(lineNum)
-	self.nextPc = self.lineNums.indexOf(lineNum)
-	if self.nextPc == null then
+Machine.goTo = function(lineNum)
+	self.nextLineIdx = self.lineNums.indexOf(lineNum)
+	if self.nextLineIdx == null then
 		printErr "Invalid line number: " + lineNum
 	end if
 end function
-MachineState.reset = function
+Machine.reset = function
 	self.program = {}
 	self.lineNums = []
-	self.pc = 0
+	self.lineIdx = 0
 	self.vars = {}
 	self.forLoops = []
+	self.plotPos = [0,0]
 end function
-machine = new MachineState
+machine = new Machine
 
 runUnitTests = function
 	errorCount = 0
@@ -536,18 +733,19 @@ runUnitTests = function
 	assertEqual tokenize("INT (6 * RND(1))"), ["INT(", 6, "*", "RND(", 1, ")", ")"]
 end function
 
-
-execLine ["HOME"]
+machine.reset
+machine.doImmediate ["HOME"]
 runUnitTests
 
-print "MiniBasic 0.01"
+print "MiniBasic 0.02"
 
 // HACK For testing
-repl "10 if 2+2 = 4 AND 3+3 = 6 then 30"
+repl "10 if 2+2 = 4 AND 3+3 = 6 then print ""Yep!"": GOTO 30"
 repl "20 ? ""math is broken"""
 repl "25 end"
 repl "30 ? ""math works!"""
 repl "5 REM This is just a little test program."
+repl "8 print ""Ready.."": ?""Set..."""
 repl "50 for i = 1 to 4"
 repl "60 print i"
 repl "70 next"
