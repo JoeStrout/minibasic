@@ -467,11 +467,13 @@ Machine.cmd.GOTO = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.HOME = function(tokens, startIdx, endIdx)
-		clear
-		text.row = 26
-		text.color = "#00CC00FF"
-		text.backColor = color.clear
-		gfx.clear color.black
+	clear
+	text.row = 26
+	text.color = palette[5]
+	gfx.color = text.color
+	text.backColor = color.clear
+	gfx.clear color.black
+	gfx.plotPos = [0,0]
 end function
 Machine.cmd.CLS = @Machine.cmd.HOME
 
@@ -734,7 +736,7 @@ runUnitTests = function
 end function
 
 machine.reset
-machine.doImmediate ["HOME"]
+machine.cmd.HOME
 runUnitTests
 
 print "MiniBasic 0.02"

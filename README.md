@@ -55,7 +55,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 
 ## Sample Programs
 
-Include in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games).  Most of these don't work yet, though a few of them (like "chemist") do.
+Included in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Most of these don't work yet, though a few of them (like "chemist") do.
 
 
 ## References
