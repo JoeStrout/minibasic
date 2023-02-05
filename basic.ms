@@ -20,7 +20,7 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET".split +
+keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
   "COLOR LINE PLOT".split +
   "NEW LIST".split
 
@@ -195,13 +195,20 @@ evalTokens = function(tokens)
 					stack.remove -2
 					break
 				else if stack.len > 1 and stack[-2] isa string and stack[-2].endsWith("(") then
-					funcName = stack[-2][:-1]
+					funcOrArrayName = stack[-2][:-1]
 					stack.remove -2
-					f = machine.fn.get(funcName)
-					if not @f then
-						return printErr("unknown function " + funcName)
+					f = machine.fn.get(funcOrArrayName)
+					array = machine.arrs.get(funcOrArrayName)
+					if @f then
+						stack[-1] = f(stack[-1])
+					else if array != null then
+						idx = stack[-1]
+						if not idx isa number then return printErr("array index must be numeric")
+						if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
+						stack[-1] = array[idx]
+					else
+						return printErr("unknown function or array " + funcName)
 					end if
-					stack[-1] = f(stack[-1])
 					break
 				else if stack.len < 3 then
 					return printErr("unmatched parentheses")
@@ -278,10 +285,53 @@ list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
 	return defaultIfNotFound
 end function
 
+// findCloser: find the closing element that comes after the given
+// opening position, properly skipping over nested pairs.  Note
+// that we assume the opener is *before* startIdx.
+list.findCloser = function(startIdx=0, opener="(", closer=")", endIndex=null)
+	if endIndex == null then endIndex = self.len
+	pos = startIdx
+	numOpen = 0
+	while pos < endIndex
+		if self[pos] == opener then
+			numOpen += 1
+		else if self[pos] == closer then
+			numOpen -= 1
+			if numOpen < 0 then return pos
+		end if
+		pos += 1
+	end while
+end function
+
+// findCloseParen: like findCloser, but special in that it checks for
+// opening parens at the end of tokens, e.g. "A(".
+list.findCloseParen = function(startIdx=0, endIndex=null)
+	if endIndex == null then endIndex = self.len
+	pos = startIdx
+	numOpen = 0
+	while pos < endIndex
+		if self[pos] isa string and self[pos][-1] == "(" then
+			numOpen += 1
+		else if self[pos] == ")" then
+			numOpen -= 1
+			if numOpen < 0 then return pos
+		end if
+		pos += 1
+	end while
+end function
+
 isIdentifier = function(s)
 	if s isa number or not s then return false
 	if keywords.contains(s) then return false
 	return isIdentifierChar(s[0])
+end function
+
+isNumericId = function(s)
+	return isIdentifier(s) and s[-1] != "$"
+end function
+
+isStringId = function(s)
+	return isIdentifier(s) and s[-1] == "$"
 end function
 
 printErr = function(err)
@@ -365,7 +415,8 @@ Machine.lineNums = []		// sorted list of line numbers
 Machine.lineIdx = 0			// index into lineNums for current line
 Machine.tokenIdx = 0		// which token starts the current statement in that line
 Machine.nextLineIdx = 0		// index into lineNum for next line (if defined)
-Machine.vars = {}			// key: identifier; value: value
+Machine.vars = {}			// key: identifier; value: value (scalars)
+Machine.arrs = {}			// same, but for arrays (lists)
 Machine.forLoops = []		// list of ForLoopState objects
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
@@ -427,6 +478,35 @@ Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
 	text.color = gfx.color
 end function
 
+Machine.cmd.DIM = function(tokens, startIdx, endIdx)
+	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
+	pos = startIdx + 1
+	while pos < endIdx
+		name = tokens[pos]
+		maxIndex = null
+		if name[-1] == "(" then
+			name = name[:-1]
+			if pos+2 >= endIdx then return printErr("incomplete DIM statement")
+			maxIndex = tokens[pos+1]
+			if not maxIndex isa number then return printErr("DIM size must be a number")
+			if tokens[pos+2] != ")" then return printErr("incomplete DIM statement")
+			pos += 3
+		else
+			// no dimension given; default to 10
+			maxIndex = 10
+			pos += 1
+		end if
+		if not isIdentifier(name) then return printErr("identifier expected in DIM statement")
+		if machine.arrs.hasIndex(name) then return printErr("array " + name + " already DIMensioned")
+		if isNumericId(name) then
+			machine.arrs[name] = [0] * (maxIndex+1)
+		else
+			machine.arrs[name] = [""] * (maxIndex+1)
+		end if
+		if pos < endIdx and tokens[pos] == "," then pos += 1
+	end while
+end function
+
 Machine.cmd.END = function(tokens, startIdx, endIdx)
 	machine.halt = true
 end function
@@ -434,19 +514,19 @@ Machine.cmd.STOP = @Machine.cmd.END
 
 Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
-		return printErr("incomplete FOR statement 1")
+		return printErr("incomplete FOR statement")
 	end if
 	var = tokens[1]
 	if not isIdentifier(var) then return printErr("invalid FOR loop variable")
 	toPos = tokens.indexOf("TO", startIdx+3)
-	if toPos == null or toPos >= endIdx then return printErr("incomplete FOR statement 2")
+	if toPos == null or toPos >= endIdx then return printErr("incomplete FOR statement")
 	stepPos = tokens.indexOf("STEP", startIdx+4)
 	if stepPos == null or stepPos > endIdx then stepPos = endIdx
 	fromVal = evalTokens(tokens[startIdx+3:toPos])
 	toVal = evalTokens(tokens[toPos+1:stepPos])
 	step = 1 // Too cool for BASIC: if fromVal >= toVal then step = 1 else step = -1
 	if stepPos < endIdx then
-		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement 3")
+		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
 		step = evalTokens(tokens[stepPos+1:endIdx])
 	end if
 	// ToDo: ensure we aren't already looping with this variable
@@ -545,14 +625,32 @@ end function
 
 Machine.cmd.LET = function(tokens, startIdx, endIdx)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (ignore LET)
-	if endIdx < startIdx+2 or 
-			tokens[startIdx+1] != "=" then return printErr("incomplete LET statement")
 	lvar = tokens[startIdx]
 	if lvar isa number or lvar[0] == """" then
 		return printErr("can't assign to constant")
 	end if
 	if keywords.contains(lvar) then return printErr("can't assign to keyword")
-	machine.vars[lvar] = evalTokens(tokens[startIdx+2:endIdx])
+	if lvar[-1] == "(" then
+		// array element assignment
+		// ToDo: rework this when our expression parser can report
+		// how much it consumed.  For now:
+		closeParenIdx = tokens.indexOf(")", startIdx+1)
+		if closeParenIdx == null or endIdx < closeParenIdx+2 or tokens[closeParenIdx+1] != "=" then
+			return printErr("incomplete LET statement")
+		end if
+		index = evalTokens(tokens[startIdx+1:closeParenIdx])
+		lvar = lvar[:-1]
+		array = machine.arrs.get(lvar)
+		if array == null then return printErr("No array " + lvar + " has been DIMensioned")
+		if index < 0 or index >= array.len then printErr("Out of bounds error on " + lvar)
+		array[index] = evalTokens(tokens[closeParenIdx+2:endIdx])
+	else
+		// normal (scalar) assignment
+		if endIdx < startIdx+2 or tokens[startIdx+1] != "=" then
+			return printErr("incomplete LET statement")
+		end if
+		machine.vars[lvar] = evalTokens(tokens[startIdx+2:endIdx])
+	end if
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
@@ -634,8 +732,15 @@ end function
 Machine.runOneStatement = function(tokens, startTokenIndex)
 	if startTokenIndex >= tokens.len then return null
 	cmd = tokens[startTokenIndex]
-	if isIdentifier(cmd) and startTokenIndex+1 < tokens.len and
-	  tokens[startTokenIndex+1] == "=" then cmd = "LET"
+	if isIdentifier(cmd) then
+		// check for the special case of an assignment statement without LET
+		if cmd[-1] == "(" then
+			assignPos = tokens.findCloseParen(startTokenIndex + 1) + 1
+		else
+			assignPos = startTokenIndex + 1
+		end if
+		if assignPos < tokens.len and tokens[assignPos] == "=" then cmd = "LET"
+	end if
 	statementEnd = tokens.indexOfAny([":","THEN","ELSE"], startTokenIndex)
 	if statementEnd == null then statementEnd = tokens.len
 	f = self.cmd.get(cmd)

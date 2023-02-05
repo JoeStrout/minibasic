@@ -12,6 +12,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 - program editing by entering a line number with code to insert/replace that line, or a line number alone to delete that line
 - expression parsing including all standard operators
 - support for multiple statements on one line, separated by `:`
+- one-dimensional arrays
 - program management:
   - `NEW`
   - `LIST` (note: not yet with range of line numbers)
@@ -29,14 +30,14 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `NEXT` (note: not yet supporting a variable name)
   - `END`
   - `REM`
+  - `CLEAR` (resets all variables)
 - standard(ish) BASIC functions:
   - `INT`, `STR`, `VAL`
   - `ABS`, `SGN`, etc.
   - `RND`
   - `TAB` (sets horizontal cursor position, then returns "")
 - nonstandard BASIC commands:
-  - `CLEAR` (resets all variables)
-  - `HOME` (clears the screen and resets the cursor)
+  - `HOME` or `CLS` (clears the screen and resets the cursor)
   - `COLOR` _n_ (pick a color 0-15; or pass a color hex string)
   - `PLOT` _x_, _y_, (plot a single pixel, and set the plot position)
   - `LINE` _x_, _y_, (draw a line from the last plot/line position)
@@ -47,7 +48,7 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `SAVE`
   - `RENAME`
   - `RENUMBER`
-- support for arrays
+- support for multidimensional arrays
 - distinction between string and numeric variables
 - standard BASIC commands:
   - `DATA` and `READ`
