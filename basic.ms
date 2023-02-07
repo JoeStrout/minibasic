@@ -233,7 +233,12 @@ end function
 // evalTokens: evaluate a tokenized expression.
 //  For example, given [6, "*", 7], return 42.
 evalTokens = function(tokens)
-//	print "evalTokens(" + tokens + ")"
+
+	debugPrint = function(s)
+		//text.color = "#008800"; print s; text.color = gfx.color
+	end function
+
+	debugPrint "evalTokens(" + tokens + ")"
 	stack = []
 	
 	doBinop = function
@@ -279,7 +284,7 @@ evalTokens = function(tokens)
 		else
 			return printErr("Unknown operator: " + op)
 		end if
-//		print "Applied " + op + " to " + opA + " and " + opB + " to get " + stack[-1]
+		debugPrint "Applied " + op + " to " + opA + " and " + opB + " to get " + stack[-1]
 	end function
 	
 	doUnaryOp = function
@@ -290,59 +295,111 @@ evalTokens = function(tokens)
 		else if op == "NOT" then
 			stack.push not (opA != 0)
 		end if
-//		print "Applied " + op + " to " + opA + " to get " + stack[-1]
+		debugPrint "Applied " + op + " to " + opA + " to get " + stack[-1]
+	end function
+	
+	// Find the function call (or array lookup) in the stack; it will
+	// be the thing closest to the top that looks like "ABC(".  Return
+	// that, along with its arguments (stuff on the stack above that),
+	// pulling all of these off the stack.  If no such thing is found
+	// (before we get to an operator or start of stack), return null.
+	pullCall = function
+		pos = stack.len - 1
+		while pos >= 0
+			if stack[pos] isa string and stack[pos][-1] == "(" then
+				// found it!  Grab the function and arguments, with commas...
+				result = stack[pos:]
+				// strip out the commas...
+				for i in range(result.len-1, 1)
+					if result[i] == "," then result.remove i
+				end for
+				// clear all that stuff off the stack
+				while stack.len > pos; stack.pop; end while
+				// and we're done
+				return result
+			end if
+			pos -= 1
+		end while
+		return null
+	end function
+
+	// Collapse any binary and unary operators on the top of 
+	// the stack.  This should proceed until we hit either the
+	// bottom of the stack, or an open paren, or a comma.
+	collapseStack = function
+		debugPrint "Collapsing stack: " + stack
+		while stack.len > 1
+			if stack[-2] == "," then return
+			if stack[-2] isa string and stack[-2][-1] == "(" then return			
+			if stack[-2] == "NOT" or (stack.len > 2 and stack[-3][-1] == "(") then
+				doUnaryOp
+			else if stack.len > 2 then
+				doBinop
+			else
+				break
+			end if
+		end while
+		debugPrint "...collapsed to:  " + stack
 	end function
 	
 	pos = 0
 	tokensLen = tokens.len
 	while pos < tokensLen
 		tok = tokens[pos]
-//		print stack + " <-- " + tok
+		debugPrint stack + " <-- " + tok
 		if tok isa string and tok.endsWith("(") then
 			stack.push tok
+		else if tok == "," then
+			// we've gotten a comma, which is a top-level grouper;
+			// go ahead and collapse anything on the stack back to 
+			// the previous comma or open-paren
+			collapseStack
+			stack.push tok
 		else if tok == ")" then
-			// collapse stack back to opening "("
-			while stack
-//				print "Collapsing from (): " + stack
-				if stack[-1] == "(" then
-					stack.pop
-					break
-				else if stack.len > 1 and stack[-2] == "(" then
-					stack.remove -2
-					break
-				else if stack.len > 1 and stack[-2] isa string and stack[-2].endsWith("(") then
-					funcOrArrayName = stack[-2][:-1]
-					stack.remove -2
+			// collapse last argument, i.e. collapse stack back to opening "(" or ","
+			collapseStack
+			// Now, there are two cases.  Either this is a plain parenthesized
+			// sub-expression, or it is a function/array call.
+			// If it's a sub-expression, then the open paren must be the next-
+			// to-last item in the stack.
+			if stack[stack.len-2] == "(" then
+				debugPrint "Ordinary parenthesized sub-expression found"
+				// ...in this case, we just remove the open paren and we're done
+				stack.remove stack.len-2
+			else
+				// otherwise, it should be a call
+				call = pullCall
+				if call then
+					debugPrint "Evaluating a call: " + call
+					funcOrArrayName = call[0][:-1]
+					args = call[1:]; if args.len == 1 then args = args[0]
 					f = machine.fn.get(funcOrArrayName)
 					array = machine.arrs.get(funcOrArrayName)
 					if @f then
-						stack[-1] = f(stack[-1])
+						stack.push f(args)
 					else if array != null then
-						idx = stack[-1]
+						idx = args
 						if not idx isa number then return printErr("array index must be numeric")
 						if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
-						stack[-1] = array[idx]
+						stack.push array[idx]
 					else
 						return printErr("unknown function or array " + funcOrArrayName)
 					end if
-					break
 				else if stack.len < 3 then
 					return printErr("unmatched parentheses")
 				end if
-				doBinop
-			end while
+			end if
 		else if tok isa number then
 			// push a numeric operand
 			stack.push tok
 			if stack.len > 1 and stack[-2] == "-" and
 					(stack.len == 2 or (stack[-3] isa string and 
 					stack[-3].endsWith("("))) then
-//				print "Doing unary op on: " + stack
 				doUnaryOp
 			end if
 		else if tok[0] == """" then
 			// push a string literal
-			stack.push tok[1:-1]
+			stack.push tok[1:-1]			
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
@@ -368,22 +425,17 @@ evalTokens = function(tokens)
 			if stack.len > 1 and stack[-2] == "-" and
 					(stack.len == 2 or (stack[-3] isa string and 
 					stack[-3].endsWith("("))) then
-//				print "Doing unary op on: " + stack	// ToDo: DRY
 				doUnaryOp
 			end if
 		end if
+		debugPrint "After handling " + tokens[pos] + ", stack is now: " + stack
 		pos += 1
 	end while
 	// finally, collapse the stack (which should be in precedence order)
-	while stack.len > 1
-		if stack[-2] == "NOT" then
-			doUnaryOp
-		else if stack.len > 2 then
-			doBinop
-		else
-			break
-		end if
-	end while
+	collapseStack
+	if stack.len > 1 then
+		printErr "Syntax error -- extra stuff on stack: " + stack
+	end if
 	return stack[0]
 end function
 
@@ -480,6 +532,7 @@ Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 
 // Define all the built-in functions
+// (in alphabetical order below)
 Machine.fn = {}
 Machine.fn.ABS = function(n); return abs(n); end function
 Machine.fn.ASC = function(s); return code(s); end function
@@ -490,9 +543,28 @@ Machine.fn.EXP = function(n); return mathUtil.e ^ n; end function
 Machine.fn.FIX = function(n); return int(n); end function
 Machine.fn["INKEY$"] = function(z); return key.get; end function
 Machine.fn.INT = function(n); return floor(n); end function
+Machine.fn["LEFT$"] = function(args)
+	if not args isa list then return args
+	s = args[0]
+	if args.len > 1 then length = args[1] else length = s.len
+	return s[:length]
+end function
 Machine.fn.LEN = function(s); return s.len; end function
 Machine.fn.LOG = function(n); return mathUtil.ln(n); end function
+Machine.fn["MID$"] = function(args)
+	if not args isa list then return args
+	s = args[0]
+	if args.len > 1 then startPos = args[1] else startPos = 1
+	if args.len > 2 then length = args[2] else length = s.len
+	return s[startPos-1:startPos-1+length]
+end function
 Machine.fn.POS = function(z); return text.column; end function
+Machine.fn["RIGHT$"] = function(args)
+	if not args isa list then return args
+	s = args[0]
+	if args.len > 1 then length = args[1] else length = s.len
+	return s[-length:]
+end function
 Machine.fn.RND = function(n); if n < 0 then rnd(n); return rnd; end  function
 Machine.fn.SGN = function(n); return sign(n); end function
 Machine.fn.SIN = function(n); return sin(n); end function
@@ -513,7 +585,6 @@ Machine.fn.VAL = function(s); return val(s); end function
 // OCT$ (convert number to octal)
 // INPUT$ (from MBASIC-80)
 // INSTR (substring search)
-// LEFT$, MID$, RIGHT$
 // PEEK, POKE
 // STRING$
 
@@ -763,8 +834,8 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	pos = startIdx + 1
 	needEOL = true
 	while pos < endIdx
-		endPos = tokens.indexOfAny(",;", pos, tokens.len)
-		if endPos > endIdx then endPos = endIdx
+		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
+//		print "Now to print: " + tokens[pos:endPos]
 		value = evalTokens(tokens[pos:endPos])
 //		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
 		print value, ""
@@ -930,7 +1001,7 @@ machine.reset
 machine.cmd.HOME
 runUnitTests
 
-print "MiniBasic 0.02"
+print "MiniBasic 0.03"
 
 // HACK For testing
 repl "10 if 2+2 = 4 AND 3+3 = 6 then print ""Yep!"": GOTO 30"
@@ -939,9 +1010,8 @@ repl "25 end"
 repl "30 ? ""math works!"""
 repl "5 REM This is just a little test program."
 repl "8 print ""Ready.."": ?""Set..."""
-repl "50 for i = 1 to 4"
-repl "60 print i"
-repl "70 next"
+repl "50 A$ = ""Hello world!"""
+repl "60 print LEFT$(A$, 5) + RIGHT$(A$, 1)"
 repl "list"
 
 basic = function
