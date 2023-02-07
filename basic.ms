@@ -49,12 +49,13 @@ int = function(x)
 	if x >= 0 then return floor(x) else return ceil(x)
 end function
 
-// indexOfAny: return the smallest index of any of the options;
-// or if none are found, return the given default.
-list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
+// indexOfAny: return the smallest index of any of the options
+// that occurs after the given startIdx;
+// if none are found, return the given default.
+list.indexOfAny = function(options, afterIdx=-1, defaultIfNotFound=null)
 	bestResult = null
 	for opt in options
-		idx = self.indexOf(opt, startIdx)
+		idx = self.indexOf(opt, afterIdx)
 		if idx != null and (bestResult == null or idx < bestResult) then
 			bestResult = idx
 		end if
@@ -80,6 +81,7 @@ list.findCloser = function(startIdx=0, opener="(", closer=")", endIndex=null)
 		pos += 1
 	end while
 end function
+string.findCloser = @list.findCloser	// works for strings, too!
 
 // findCloseParen: like findCloser, but special in that it checks for
 // opening parens at the end of tokens, e.g. "A(".
@@ -96,6 +98,30 @@ list.findCloseParen = function(startIdx=0, endIndex=null)
 		end if
 		pos += 1
 	end while
+end function
+
+// indexOfAnyParenSavvy: just like indexOfAny, except that this method 
+// ignores anything within pairs of parentheses (including tokens that
+// end with an opening paren, like "ABS(").  This is often the right 
+// way to find the comma that delineates the next argument to a function
+// or whatever, as it will properly grab the entire expression, even
+// if that expression contains function calls with commas in them.
+list.indexOfAnyParenSavvy = function(options, afterIdx=-1, endIndex=null, defaultIfNotFound=null)
+	if not options isa list then options = [options]
+	if endIndex == null then endIndex = self.len
+	pos = afterIdx + 1
+	numOpen = 0
+	while pos < endIndex
+		item = self[pos]
+		if numOpen == 0 and options.contains(item) then return pos
+		if item isa string and item[-1] == "(" then
+			numOpen += 1
+		else if item == ")" then
+			numOpen -= 1
+		end if
+		pos += 1
+	end while
+	return defaultIfNotFound
 end function
 
 isIdentifier = function(s)
@@ -297,7 +323,7 @@ evalTokens = function(tokens)
 						if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
 						stack[-1] = array[idx]
 					else
-						return printErr("unknown function or array " + funcName)
+						return printErr("unknown function or array " + funcOrArrayName)
 					end if
 					break
 				else if stack.len < 3 then
@@ -878,6 +904,22 @@ runUnitTests = function
 	assertEqual tokenize("5*-2"), [5, "*", -2]
 	assertEqual tokenize("5--2"), [5, "-", -2]
 	assertEqual tokenize("INT (6 * RND(1))"), ["INT(", 6, "*", "RND(", 1, ")", ")"]
+	
+	a = tokenize("INT (6 * RND(1))")
+	assertEqual a.indexOfAny([")", "*"]), 2
+	assertEqual a.indexOfAny([")", "*"], 2), 5
+	assertEqual a.indexOfAny([")", "*"], 5), 6
+	assertEqual a.indexOfAny([")", "*"], 6), null
+	assertEqual a.indexOfAny([")", "*"], 6, -1), -1
+	assertEqual a.findCloseParen(1), 6
+	
+	a = tokenize("PRINT LEFT$(A$,5), MID$(A$,LEN(A$)/2), RIGHT$(A$,F(X,4))")
+	assertEqual a.indexOfAnyParenSavvy(","), 6
+	assertEqual a.indexOfAnyParenSavvy(",", 1), 3
+	assertEqual a.indexOfAnyParenSavvy(",", 6), 16
+	assertEqual a.indexOfAnyParenSavvy(",", 16), null
+	
+	if errorCount then exit
 end function
 
 //======================================================================
