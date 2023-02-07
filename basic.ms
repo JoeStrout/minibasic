@@ -5,6 +5,28 @@ import "listUtil"
 import "mapUtil"
 import "mathUtil"
 
+//======================================================================
+// Constants
+//======================================================================
+
+// Keywords, including all BASIC commands (but not including functions,
+// which are defined as part of the Machine class):
+keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
+  "COLOR LINE PLOT".split +
+  "NEW LIST".split
+
+// BASIC operators:
+operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
+
+// Color palette: same as the C-64:
+palette = ("#000000 #FFFFFF #880000 #AAFFEE #CC44CC #00CC55 #0000AA #EEEE77 " +
+          "#DD8855 #664400 #FF7777 #333333 #777777 #AAFF66 #0088FF #BBBBBB").split
+
+
+//======================================================================
+// Small Helper Functions
+//======================================================================
+
 isNumericChar = function(c)
 	return (c >= "0" and c <= "9")
 end function
@@ -20,11 +42,79 @@ isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
 end function
 
-keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
-  "COLOR LINE PLOT".split +
-  "NEW LIST".split
+// int: lops of the decimal portion of the given number.
+// This means rounding down for positive numbers, but
+// rounding up for negative numbers.
+int = function(x)
+	if x >= 0 then return floor(x) else return ceil(x)
+end function
 
-operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
+// indexOfAny: return the smallest index of any of the options;
+// or if none are found, return the given default.
+list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
+	bestResult = null
+	for opt in options
+		idx = self.indexOf(opt, startIdx)
+		if idx != null and (bestResult == null or idx < bestResult) then
+			bestResult = idx
+		end if
+	end for
+	if bestResult != null then return bestResult
+	return defaultIfNotFound
+end function
+
+// findCloser: find the closing element that comes after the given
+// opening position, properly skipping over nested pairs.  Note
+// that we assume the opener is *before* startIdx.
+list.findCloser = function(startIdx=0, opener="(", closer=")", endIndex=null)
+	if endIndex == null then endIndex = self.len
+	pos = startIdx
+	numOpen = 0
+	while pos < endIndex
+		if self[pos] == opener then
+			numOpen += 1
+		else if self[pos] == closer then
+			numOpen -= 1
+			if numOpen < 0 then return pos
+		end if
+		pos += 1
+	end while
+end function
+
+// findCloseParen: like findCloser, but special in that it checks for
+// opening parens at the end of tokens, e.g. "A(".
+list.findCloseParen = function(startIdx=0, endIndex=null)
+	if endIndex == null then endIndex = self.len
+	pos = startIdx
+	numOpen = 0
+	while pos < endIndex
+		if self[pos] isa string and self[pos][-1] == "(" then
+			numOpen += 1
+		else if self[pos] == ")" then
+			numOpen -= 1
+			if numOpen < 0 then return pos
+		end if
+		pos += 1
+	end while
+end function
+
+isIdentifier = function(s)
+	if s isa number or not s then return false
+	if keywords.contains(s) then return false
+	return isIdentifierChar(s[0])
+end function
+
+isNumericId = function(s)
+	return isIdentifier(s) and s[-1] != "$"
+end function
+
+isStringId = function(s)
+	return isIdentifier(s) and s[-1] == "$"
+end function
+
+//======================================================================
+// Lexer (i.e. tokenizer)
+//======================================================================
 
 // tokenize: take the given line af BASIC code and return a 
 // list of tokens.  Numbers will be actual numbers in the token
@@ -110,9 +200,9 @@ tokenize = function(line)
 	return tokens
 end function
 
-int = function(x)
-	if x >= 0 then return floor(x) else return ceil(x)
-end function
+//======================================================================
+// Expression evaluation
+//======================================================================
 
 // evalTokens: evaluate a tokenized expression.
 //  For example, given [6, "*", 7], return 42.
@@ -271,73 +361,24 @@ evalTokens = function(tokens)
 	return stack[0]
 end function
 
-// indexOfAny: return the smallest index of any of the options;
-// or if none are found, return the given default.
-list.indexOfAny = function(options, startIdx=0, defaultIfNotFound=null)
-	bestResult = null
-	for opt in options
-		idx = self.indexOf(opt, startIdx)
-		if idx != null and (bestResult == null or idx < bestResult) then
-			bestResult = idx
-		end if
-	end for
-	if bestResult != null then return bestResult
-	return defaultIfNotFound
-end function
-
-// findCloser: find the closing element that comes after the given
-// opening position, properly skipping over nested pairs.  Note
-// that we assume the opener is *before* startIdx.
-list.findCloser = function(startIdx=0, opener="(", closer=")", endIndex=null)
-	if endIndex == null then endIndex = self.len
-	pos = startIdx
-	numOpen = 0
-	while pos < endIndex
-		if self[pos] == opener then
-			numOpen += 1
-		else if self[pos] == closer then
-			numOpen -= 1
-			if numOpen < 0 then return pos
-		end if
-		pos += 1
-	end while
-end function
-
-// findCloseParen: like findCloser, but special in that it checks for
-// opening parens at the end of tokens, e.g. "A(".
-list.findCloseParen = function(startIdx=0, endIndex=null)
-	if endIndex == null then endIndex = self.len
-	pos = startIdx
-	numOpen = 0
-	while pos < endIndex
-		if self[pos] isa string and self[pos][-1] == "(" then
-			numOpen += 1
-		else if self[pos] == ")" then
-			numOpen -= 1
-			if numOpen < 0 then return pos
-		end if
-		pos += 1
-	end while
-end function
-
-isIdentifier = function(s)
-	if s isa number or not s then return false
-	if keywords.contains(s) then return false
-	return isIdentifierChar(s[0])
-end function
-
-isNumericId = function(s)
-	return isIdentifier(s) and s[-1] != "$"
-end function
-
-isStringId = function(s)
-	return isIdentifier(s) and s[-1] == "$"
-end function
+//======================================================================
+// Functions that use and/or modify the state of the virtual machine.
+// (Includes the Machine class, but also some global helper methods.)
+//======================================================================
 
 printErr = function(err)
 	print "Error: " + err
 	exit
 	machine.halt = true
+end function
+
+listProgram = function(remarksOnly = false)
+	machine.sortLines
+	for lineNum in machine.lineNums
+		tokens = machine.program[lineNum]
+		if remarksOnly and tokens[0] != "REM" then continue
+		print lineNum + " " + tokens.join(" ")
+	end for
 end function
 
 // repl: handle raw input from the user, which may be an 
@@ -383,15 +424,6 @@ repl = function(line)
 	end if
 end function
 
-listProgram = function(remarksOnly = false)
-	machine.sortLines
-	for lineNum in machine.lineNums
-		tokens = machine.program[lineNum]
-		if remarksOnly and tokens[0] != "REM" then continue
-		print lineNum + " " + tokens.join(" ")
-	end for
-end function
-
 ForLoopState = {}
 ForLoopState.var = ""
 ForLoopState.step = 1
@@ -421,6 +453,7 @@ Machine.forLoops = []		// list of ForLoopState objects
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 
+// Define all the built-in functions
 Machine.fn = {}
 Machine.fn.ABS = function(n); return abs(n); end function
 Machine.fn.ASC = function(s); return code(s); end function
@@ -458,10 +491,8 @@ Machine.fn.VAL = function(s); return val(s); end function
 // PEEK, POKE
 // STRING$
 
-
-palette = ("#000000 #FFFFFF #880000 #AAFFEE #CC44CC #00CC55 #0000AA #EEEE77 " +
-          "#DD8855 #664400 #FF7777 #333333 #777777 #AAFF66 #0088FF #BBBBBB").split
-
+// Define all the BASIC commands 
+// (in alphabetical order below)
 Machine.cmd = {}
 
 Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
@@ -624,7 +655,7 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.LET = function(tokens, startIdx, endIdx)
-	if tokens[startIdx] == "LET" then startIdx += 1  // (ignore LET)
+	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
 	lvar = tokens[startIdx]
 	if lvar isa number or lvar[0] == """" then
 		return printErr("can't assign to constant")
@@ -726,6 +757,7 @@ Machine.cmd.REM = function(tokens, startIdx, endIdx)
 	// no action needed!
 end function
 
+
 // Run one statement within the given set of tokens,
 // returning the token that starts the NEXT statement
 // within the same set, or null if there are no more.
@@ -807,12 +839,14 @@ Machine.sortLines = function
 	self.lineNums = self.program.indexes
 	self.lineNums.sort
 end function
+
 Machine.goTo = function(lineNum)
 	self.nextLineIdx = self.lineNums.indexOf(lineNum)
 	if self.nextLineIdx == null then
 		printErr "Invalid line number: " + lineNum
 	end if
 end function
+
 Machine.reset = function
 	self.program = {}
 	self.lineNums = []
@@ -821,7 +855,13 @@ Machine.reset = function
 	self.forLoops = []
 	self.plotPos = [0,0]
 end function
+
 machine = new Machine
+
+//======================================================================
+// Unit Tests.
+// (...we should probably have many more of these!)
+//======================================================================
 
 runUnitTests = function
 	errorCount = 0
@@ -839,6 +879,10 @@ runUnitTests = function
 	assertEqual tokenize("5--2"), [5, "-", -2]
 	assertEqual tokenize("INT (6 * RND(1))"), ["INT(", 6, "*", "RND(", 1, ")", ")"]
 end function
+
+//======================================================================
+// Main Program
+//======================================================================
 
 machine.reset
 machine.cmd.HOME
@@ -867,6 +911,7 @@ _savedGlobals.basic = @basic
 
 cd "/usr/programs"
 
+// Main loop (invoking the REPL until done)
 while true
 	line = input(">")
 	if line.lower == "exit" then break
