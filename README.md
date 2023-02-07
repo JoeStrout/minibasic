@@ -1,4 +1,4 @@
-# minibasic
+# miniBASIC
 [BASIC](https://en.wikipedia.org/wiki/BASIC) interpreter for [Mini Micro](https:miniscript.org/MiniMicro/)
 
 
@@ -51,7 +51,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 - support for multidimensional arrays
 - distinction between string and numeric variables
 - standard BASIC commands:
-  - `DATA` and `READ`
+  - `DATA`, `READ`, and `RESTORE'
   - `GOSUB` and `RETURN`
 
 ## Sample Programs
