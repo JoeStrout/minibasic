@@ -12,6 +12,7 @@ import "mathUtil"
 // Keywords, including all BASIC commands (but not including functions,
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
+  "GOSUB RETURN DATA READ RESTORE".split +
   "COLOR LINE PLOT".split +
   "NEW LIST".split
 
@@ -155,7 +156,7 @@ tokenize = function(line)
 		c = line[p0]
 		if isWhitespaceChar(c) then
 			p0 += 1
-		else if c >= "0" and c <= "9" then
+		else if c >= "0" and c <= "9" or c == "." then
 			// lex a number
 			p1 = p0 + 1
 			while p1 < lineLen and (isNumericChar(line[p1]) or line[p1] == ".")
@@ -450,12 +451,83 @@ printErr = function(err)
 	machine.halt = true
 end function
 
+syntaxColor = {}
+syntaxColor.number = "#AAAAFF"
+syntaxColor.string = "#88FF88"
+syntaxColor.operator = "#FFFF88"
+syntaxColor.punctuation = "#88FFFF"
+syntaxColor.lineNum = "#888888"
+syntaxColor.lineNumTarget = "#BBBBBB"
+syntaxColor.rem = "#666666"
+syntaxColor.comment = "#FFFFFF"
+syntaxColor.keyword = "#FF88FF"
+syntaxColor.colon = syntaxColor.lineNum
+
+listOneLine = function(lineNum, tokens)
+	if machine.comeFrom.hasIndex(lineNum) then
+		text.color = syntaxColor.lineNumTarget
+	else
+		text.color = syntaxColor.lineNum
+	end if
+	print lineNum, " "
+	space = ""
+	for tok in tokens
+		if tok == "REM" then
+			text.color = syntaxColor.rem
+			print space + tok, " "
+			text.color = syntaxColor.comment
+			print tokens[-1]
+			return
+		else if keywords.contains(tok) then
+			text.color = syntaxColor.keyword
+			print space + tok, " "
+			space = ""
+		else if tok == ":" then
+			text.color = syntaxColor.colon
+			print space + tok + " ", ""
+			space = ""
+		else if tok == "," or tok == ";" or tok == "(" or tok == ")" then
+			text.color = syntaxColor.punctuation
+			print tok, ""
+			space = " " * (tok != "(")
+		else if tok[-1] == "(" then
+			id = tok[:-1]
+			if isStringId(id) then text.color = syntaxColor.string else text.color = syntaxColor.number
+			print space + id, ""
+			tok = tok[-1]
+			text.color = syntaxColor.punctuation
+			print tok, ""
+			space = ""
+		else if operators.contains(tok) then
+			text.color = syntaxColor.operator
+			print space + tok, ""
+			space = " "
+		else if tok isa number or isNumericId(tok) then
+			text.color = syntaxColor.number
+			print space + tok, ""
+			space = " "
+		else if tok.startsWith("""") or isStringId(tok) then
+			text.color = syntaxColor.string
+			print space + tok, ""
+			space = " "
+		else
+			// what is this?!
+			text.color = "#FFAAAA"
+			print space + tok, ""
+			space = " "
+		end if
+	end for
+	text.color = gfx.color
+	print
+end function
+
 listProgram = function(remarksOnly = false)
 	machine.sortLines
+	machine.findComeFroms
 	for lineNum in machine.lineNums
 		tokens = machine.program[lineNum]
 		if remarksOnly and tokens[0] != "REM" then continue
-		print lineNum + " " + tokens.join(" ")
+		listOneLine lineNum, tokens
 	end for
 end function
 
@@ -937,6 +1009,27 @@ Machine.sortLines = function
 	self.lineNums.sort
 end function
 
+Machine.findComeFroms = function
+	self.comeFrom = {}
+	for kv in self.program
+		lineNum = kv.key
+		line = kv.value
+		for i in range(0, line.len-2)
+			if line[i] == "GOTO" then
+				for j in range(i+1, line.len-1)
+					target = line[j]
+					if target == ":" then break
+					if target isa number then self.comeFrom[target] = self.comeFrom.get(target, []) + [lineNum]
+				end for
+			else if line[i] == "GOSUB" or line[i] == "THEN" then
+				target = line[i+1]
+				if not target isa number then continue
+				self.comeFrom[target] = self.comeFrom.get(target, []) + [lineNum]
+			end if
+		end for
+	end for
+end function
+
 Machine.goTo = function(lineNum)
 	self.nextLineIdx = self.lineNums.indexOf(lineNum)
 	if self.nextLineIdx == null then
@@ -1004,14 +1097,15 @@ runUnitTests
 print "MiniBasic 0.03"
 
 // HACK For testing
-repl "10 if 2+2 = 4 AND 3+3 = 6 then print ""Yep!"": GOTO 30"
+repl "10 if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"": GOTO 30"
 repl "20 ? ""math is broken"""
 repl "25 end"
 repl "30 ? ""math works!"""
 repl "5 REM This is just a little test program."
-repl "8 print ""Ready.."": ?""Set..."""
+repl "8 print ""Ready..."";: ?""Set..."""
 repl "50 A$ = ""Hello world!"""
 repl "60 print LEFT$(A$, 5) + RIGHT$(A$, 1)"
+repl "70 if SIN(1.5) < 0 THEN 20"
 repl "list"
 
 basic = function

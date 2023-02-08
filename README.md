@@ -53,6 +53,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 - standard BASIC commands:
   - `DATA`, `READ`, and `RESTORE'
   - `GOSUB` and `RETURN`
+  - `DEF FN`
 
 ## Sample Programs
 
