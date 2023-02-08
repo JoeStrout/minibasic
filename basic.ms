@@ -622,6 +622,10 @@ ForLoopState.make = function(var, limit, step, topLine, topToken)
 	return fls
 end function
 
+ReturnStackEntry = {}
+ReturnStackEntry.lineIdx = 0
+ReturnStackEntry.tokenIdx = 0
+
 // Machine State:
 Machine = {}
 Machine.program = {}		// key: line number; value: tokens
@@ -632,6 +636,7 @@ Machine.nextLineIdx = 0		// index into lineNum for next line (if defined)
 Machine.vars = {}			// key: identifier; value: value (scalars)
 Machine.arrs = {}			// same, but for arrays (lists)
 Machine.forLoops = []		// list of ForLoopState objects
+Machine.returnStack = []	// stack of places to RETURN to (from GOSUB)
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 
@@ -771,11 +776,27 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 	machine.forLoops.push ForLoopState.make(var, toVal, step, lineIdx, tokenIdx)
 end function
 
+Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
+	if endIdx != startIdx + 2 or not (tokens[1] isa number) then
+		return printErr("line number required for GOSUB")
+	end if
+	returnTo = new ReturnStackEntry
+	if endIdx + 1 < tokens.len then
+		returnTo.lineIdx = machine.lineIdx; returnTo.tokenIdx = endIdx + 1
+	else
+		returnTo.lineIdx = machine.lineIdx + 1
+	end if
+	machine.returnStack.push returnTo
+	machine.goTo tokens[startIdx+1]
+	return 0
+end function
+
 Machine.cmd.GOTO = function(tokens, startIdx, endIdx)
 	if endIdx != startIdx + 2 or not (tokens[1] isa number) then
 		return printErr("line number required for GOTO")
 	end if
-	machine.goTo tokens[startIdx+1]	
+	machine.goTo tokens[startIdx+1]
+	return 0
 end function
 
 Machine.cmd.HOME = function(tokens, startIdx, endIdx)
@@ -811,7 +832,7 @@ Machine.cmd.IF = function(tokens, startIdx, endIdx)
 		machine.inThen = true
 		if tokens[endIdx+1] isa number then
 			machine.goTo tokens[endIdx+1]
-			return
+			return 0
 		else
 			return endIdx + 1
 		end if
@@ -828,7 +849,7 @@ Machine.cmd.IF = function(tokens, startIdx, endIdx)
 					// treat it as a GoTo; otherwise jump to that statement.
 					if tokens[i+1] isa number then
 						machine.goTo tokens[i+1]
-						return
+						return 0
 					else
 						return i+1
 					end if
@@ -958,6 +979,13 @@ Machine.cmd.REM = function(tokens, startIdx, endIdx)
 	// no action needed!
 end function
 
+Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
+	if not machine.returnStack then return printErr("RETURN without GOSUB")
+	returnTo = machine.returnStack.pop
+	machine.nextLineIdx = returnTo.lineIdx
+	return returnTo.tokenIdx
+end function
+
 
 // Run one statement within the given set of tokens,
 // returning the token that starts the NEXT statement
@@ -1011,28 +1039,36 @@ Machine.doImmediate = function(tokens)
 	end while
 end function
 
+Machine.runOneLine = function
+	tokens = self.program[self.lineNums[self.lineIdx]]
+	if self.tokenIdx == null then self.tokenIdx = 0
+	self.nextLineIdx = null
+	while self.tokenIdx < tokens.len
+		self.nextLineIdx = null
+		self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
+		if self.halt then return
+		if self.nextLineIdx != null then break
+	end while
+
+	if not self.nextLineIdx then
+		self.lineIdx += 1
+		self.tokenIdx = 0
+		if self.lineIdx >= self.lineNums.len then return
+//		print "Advancing to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
+	else
+		self.lineIdx = self.nextLineIdx
+//		print "Jumping to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx] +
+//		 ", at token " + self.tokenIdx
+	end if
+end function
+
 Machine.runProgram = function
 	self.sortLines
 	self.halt = false
 	self.lineIdx = 0
 	self.inThen = false
 	while not self.halt and self.lineIdx < self.lineNums.len
-		tokens = self.program[self.lineNums[self.lineIdx]]
-		self.tokenIdx = 0
-		while not self.halt and self.tokenIdx < tokens.len
-			self.nextLineIdx = null
-			self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
-			if self.nextLineIdx != null then break
-		end while
-
-		if not self.nextLineIdx then
-			self.lineIdx += 1
-			if self.lineIdx >= self.lineNums.len then break
-//			print "Advancing to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
-		else
-			self.lineIdx = self.nextLineIdx
-//			print "Jumping to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
-		end if		
+		self.runOneLine
 	end while
 end function
 
@@ -1137,15 +1173,20 @@ runUnitTests
 print "MiniBasic 0.04"
 
 // HACK For testing
-repl "10 if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"": GOTO 30"
+repl "10 gosub 100: if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"": GOTO 30"
 repl "20 ? ""math is broken"""
 repl "25 end"
 repl "30 ? ""math works!"""
+repl "40 gosub 100"
 repl "5 REM This is just a little test program."
 repl "8 print ""Ready..."";: ?""Set..."""
 repl "50 A$ = ""Hello world!"""
 repl "60 print LEFT$(A$, 5) + RIGHT$(A$, 1)"
 repl "70 if SIN(1.5) < 0 THEN 20"
+repl "80 END"
+repl "100 REM Test Subroutine"
+repl "110 print: print ""====="": print"
+repl "120 return"
 repl "list"
 
 basic = function

@@ -24,6 +24,7 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `PRINT` (or `?` for short), with `,` and `;`
   - `INPUT` (without prompt)
   - `GOTO`
+  - `GOSUB` and `RETURN`
   - `IF` _condition_ `THEN` (with optional `ELSE`, nestable)
   - `LET` (optional; `X = 42` also works without `LET`)
   - `FOR` _var_ `=` _start_ `TO` _end_ (with optional `STEP`)
@@ -52,7 +53,6 @@ This is a little project to create an interpreter for the BASIC programming lang
 - distinction between string and numeric variables
 - standard BASIC commands:
   - `DATA`, `READ`, and `RESTORE'
-  - `GOSUB` and `RETURN`
   - `DEF FN`
 
 ## Sample Programs
