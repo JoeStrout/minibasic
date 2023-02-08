@@ -139,6 +139,36 @@ isStringId = function(s)
 	return isIdentifier(s) and s[-1] == "$"
 end function
 
+// Check tokens starting at startPos for one of these patterns:
+//	fromNum, "-", toNum
+//	"-", toNum
+//	fromNum, "-"
+//	fromAndToNum
+// Return a little map with "from" and "to" keys set to the
+// corresponding number, or null.
+getRange = function(tokens, startPos=0)
+	result = {"from":null, "to":null}
+	if startPos >= tokens.len then return result
+	if tokens.len == startPos+1 and tokens[-1] isa number and tokens[-1] < 0 then
+		// special case: a pattern like "-42" has been lexed as a negative number.
+		// But we want to treat it like ["-", 42]
+		tokens.push abs(tokens[-1])
+		tokens[-2] = "-"
+	end if
+	if tokens[startPos] == "-" then
+		if tokens.len > startPos+1 then result.to = val(tokens[startPos+1])
+		return result
+	end if
+	result.from = val(tokens[startPos])
+	if tokens.len == startPos+1 then
+		result.to = result.from
+		return result
+	end if
+	if tokens.len <= startPos+2 or tokens[startPos+1] != "-" then return result
+	result.to = val(tokens[startPos+2])
+	return result		
+end function
+
 //======================================================================
 // Lexer (i.e. tokenizer)
 //======================================================================
@@ -447,7 +477,6 @@ end function
 
 printErr = function(err)
 	print "Error: " + err
-	exit
 	machine.halt = true
 end function
 
@@ -476,8 +505,8 @@ listOneLine = function(lineNum, tokens)
 			text.color = syntaxColor.rem
 			print space + tok, " "
 			text.color = syntaxColor.comment
-			print tokens[-1]
-			return
+			print tokens[-1], ""
+			break
 		else if keywords.contains(tok) then
 			text.color = syntaxColor.keyword
 			print space + tok, " "
@@ -521,10 +550,12 @@ listOneLine = function(lineNum, tokens)
 	print
 end function
 
-listProgram = function(remarksOnly = false)
+listProgram = function(lineRange, remarksOnly = false)
 	machine.sortLines
 	machine.findComeFroms
 	for lineNum in machine.lineNums
+		if lineRange.from != null and lineNum < lineRange.from then continue
+		if lineRange.to != null and lineNum > lineRange.to then continue
 		tokens = machine.program[lineNum]
 		if remarksOnly and tokens[0] != "REM" then continue
 		listOneLine lineNum, tokens
@@ -545,14 +576,15 @@ repl = function(line)
 		if tokens.len == 1 then
 			machine.program.remove lineNum
 		else
+			if lineNum < 0 then return printErr("Line numbers must be nonnegative.")
 			machine.program[lineNum] = tokens[1:]
 		end if
 	else if cmd == "NEW" then
 		machine.reset
 	else if cmd == "LIST" then
-		listProgram
+		listProgram getRange(tokens, 1)
 	else if cmd == "LISTREM" then	// why didn't anyone else think of this?
-		listProgram true
+		listProgram getRange(tokens, 1), true
 	else if cmd == "RUN" then
 		machine.runProgram
 	else if cmd == "CAT" then
@@ -1059,6 +1091,8 @@ runUnitTests = function
 		if actual != expected then
 			print "Unit test failure (" + note + "): expected " + expected + ", got " + actual
 			outer.errorCount = errorCount + 1
+			globals.actual = actual
+			globals.expected = expected
 		end if
 	end function
 
@@ -1083,6 +1117,12 @@ runUnitTests = function
 	assertEqual a.indexOfAnyParenSavvy(",", 6), 16
 	assertEqual a.indexOfAnyParenSavvy(",", 16), null
 	
+	assertEqual getRange([10, "-", 20]), {"from":10, "to":20}
+	assertEqual getRange(["-", 20]), {"from":null, "to":20}
+	assertEqual getRange([10, "-"]), {"from":10, "to":null}
+	assertEqual getRange([10]), {"from":10, "to":10}
+	assertEqual getRange([-20]), {"from":null, "to":20}
+	
 	if errorCount then exit
 end function
 
@@ -1094,7 +1134,7 @@ machine.reset
 machine.cmd.HOME
 runUnitTests
 
-print "MiniBasic 0.03"
+print "MiniBasic 0.04"
 
 // HACK For testing
 repl "10 if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"": GOTO 30"
