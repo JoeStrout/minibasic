@@ -65,6 +65,7 @@ Included in the _programs_ subdirectory are about a hundred classic (old) BASIC 
 Detailed references on various old BASIC dialects can be hard to find.  But here are some:
 
 - [Applesoft BASIC](https://www.calormen.com/jsbasic/reference.html)
+- [Applesoft BASIC, in more detail](https://mirrors.apple2.org.za/Apple%20II%20Documentation%20Project/Software/Languages/Applesoft%20BASIC/Manuals/Applesoft%20II%20BASIC%20Programming%20Reference%20Manual.pdf)
 - [Microsoft BASIC-80](https://usermanual.wiki/Document/BASIC8028MBASIC29ReferenceManual.204768585/view)
 - [Commodore-BASIC V2.0](https://www.c64-wiki.com/wiki/C64-Commands)
 - [Classic Usborne BASIC Programming Books](https://usborne.com/us/books/computer-and-coding-books)

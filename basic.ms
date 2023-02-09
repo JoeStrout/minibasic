@@ -13,8 +13,8 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "COLOR LINE PLOT".split +
-  "NEW LIST".split
+  "CLS HOME HTAB VTAB COLOR LINE PLOT".split +
+  "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -41,6 +41,11 @@ end function
 
 isWhitespaceChar = function(c)
 	return stringUtil.whitespace.indexOf(c) != null
+end function
+
+stripQuotes = function(s)
+	if s isa string and s.len > 1 and s[0] == """" and s[-1] == """" then return s[1:-1]
+	return s
 end function
 
 // int: lops of the decimal portion of the given number.
@@ -430,7 +435,7 @@ evalTokens = function(tokens)
 			end if
 		else if tok[0] == """" then
 			// push a string literal
-			stack.push tok[1:-1]			
+			stack.push stripQuotes(tok)
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
@@ -476,7 +481,11 @@ end function
 //======================================================================
 
 printErr = function(err)
-	print "Error: " + err
+	loc = ""
+	if machine.lineIdx >= 0 and machine.lineNums.hasIndex(machine.lineIdx) then
+		loc = " in line " + machine.lineNums[machine.lineIdx]
+	end if
+	print "Error: " + err + loc
 	machine.halt = true
 end function
 
@@ -587,10 +596,14 @@ repl = function(line)
 		listProgram getRange(tokens, 1), true
 	else if cmd == "RUN" then
 		machine.runProgram
-	else if cmd == "CAT" then
-		dir
+	else if cmd == "CAT" or cmd == "DIR" then
+		path = stripQuotes(line[4:].trim)
+		dir path
+	else if cmd == "CD" then
+		path = stripQuotes(line[3:].trim)
+		cd path
 	else if cmd == "LOAD" then
-		name = line[4:].trim + ".bas"
+		name = stripQuotes(line[4:].trim) - ".bas" + ".bas"
 		lines = file.readLines(name)
 		if lines == null then
 			print "Unable to read program " + name
@@ -684,8 +697,17 @@ Machine.fn.SPC = function(n); print " "*n,""; return ""; end function
 Machine.fn.SQR = function(n); return sqrt(n); end function
 Machine.fn["STR$"] = function(n); return str(n); end function
 Machine.fn.TAB = function(n)
-	if n > text.column then print
-	text.column = n; 
+	if n isa list then
+		// With 2 or more arguments, take these as COL, ROW,
+		// and *always* move the cursor
+		text.column = val(n[0]) - 1
+		text.row = 26 - val(n[1])
+	else
+		// With just 1 argument, it's column, and we move
+		// only if the current position is left of that.
+		n = val(n)
+		if n < text.column then text.column = n - 1; 
+	end if
 	return ""
 end function
 Machine.fn.TAN = function(n); return tan(n); end function
@@ -810,7 +832,13 @@ Machine.cmd.HOME = function(tokens, startIdx, endIdx)
 	gfx.clear color.black
 	gfx.plotPos = [0,0]
 end function
-Machine.cmd.CLS = @Machine.cmd.HOME
+Machine.cmd.CLS = @Machine.cmd.HOME		// CLS is an alias for HOME
+
+Machine.cmd.HTAB = function(tokens, startIdx, endIdx)
+	col = 0
+	if startIdx + 1 < endIdx then col = val(tokens[startIdx+1])
+	text.column = col - 1
+end function
 
 Machine.cmd.IF = function(tokens, startIdx, endIdx)
 	// This seems like a very tricky case, because of multiple statements
@@ -961,6 +989,9 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	pos = startIdx + 1
 	needEOL = true
 	while pos < endIdx
+		// ToDo: grab complete expressions even if they aren't separated
+		// by any delimiters.  This is weird, but something old BASICS did,
+		// and you can find old BASIC programs that actually use this.  :(
 		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
 //		print "Now to print: " + tokens[pos:endPos]
 		value = evalTokens(tokens[pos:endPos])
@@ -968,6 +999,9 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		print value, ""
 		if endPos < endIdx then
 			if tokens[endPos] == "," then print " ", ""
+			needEOL = false
+		else if tokens[pos] == "TAB(" then
+			// weird quirk of old BASIC: the TAB function acts like a semicolon
 			needEOL = false
 		else
 			needEOL = true
@@ -978,21 +1012,20 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.READ = function(tokens, startIdx, endIdx)
-	var = null
-	if endIdx > startIdx + 1 then
-		var = tokens[startIdx + 1]
+	pos = startIdx + 1
+	while pos < endIdx
+		var = tokens[pos]
 		if not isIdentifier(var) then return printErr("invalid identifier for READ")
-	end if
-	if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
-	value = machine.data[machine.nextDataIdx]
-	if value isa string and value[0] == """" and value[-1] == """" then
-		value = value[1:-1]
-	end if
-	machine.nextDataIdx += 1
-	if var then
-		if var[-1] != "$" then value = val(value)
-		machine.vars[var] = value
-	end if
+		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
+		value = stripQuotes(machine.data[machine.nextDataIdx])
+		machine.nextDataIdx += 1
+		if var then
+			if var[-1] != "$" then value = val(value)
+			machine.vars[var] = value
+		end if
+		if pos+2 >= endIdx or tokens[pos+1] != "," then break
+		pos += 2
+	end while
 end function
 
 Machine.cmd.REM = function(tokens, startIdx, endIdx)
@@ -1008,6 +1041,12 @@ Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
 	returnTo = machine.returnStack.pop
 	machine.nextLineIdx = returnTo.lineIdx
 	return returnTo.tokenIdx
+end function
+
+Machine.cmd.VTAB = function(tokens, startIdx, endIdx)
+	row = 0
+	if startIdx + 1 < endIdx then row = val(tokens[startIdx+1])
+	text.row = 26 - row
 end function
 
 
@@ -1091,6 +1130,7 @@ Machine.runProgram = function
 	self.findData
 	self.halt = false
 	self.lineIdx = 0
+	self.tokenIdx = 0
 	self.inThen = false
 	while not self.halt and self.lineIdx < self.lineNums.len
 		self.runOneLine
