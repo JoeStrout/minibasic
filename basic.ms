@@ -637,6 +637,8 @@ Machine.vars = {}			// key: identifier; value: value (scalars)
 Machine.arrs = {}			// same, but for arrays (lists)
 Machine.forLoops = []		// list of ForLoopState objects
 Machine.returnStack = []	// stack of places to RETURN to (from GOSUB)
+Machine.data = []			// collected data from DATA statements
+Machine.nextDataIdx = 0		// which element of self.data to READ next
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 
@@ -975,8 +977,30 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	if needEOL then print
 end function
 
+Machine.cmd.READ = function(tokens, startIdx, endIdx)
+	var = null
+	if endIdx > startIdx + 1 then
+		var = tokens[startIdx + 1]
+		if not isIdentifier(var) then return printErr("invalid identifier for READ")
+	end if
+	if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
+	value = machine.data[machine.nextDataIdx]
+	if value isa string and value[0] == """" and value[-1] == """" then
+		value = value[1:-1]
+	end if
+	machine.nextDataIdx += 1
+	if var then
+		if var[-1] != "$" then value = val(value)
+		machine.vars[var] = value
+	end if
+end function
+
 Machine.cmd.REM = function(tokens, startIdx, endIdx)
 	// no action needed!
+end function
+
+Machine.cmd.RESTORE = function(tokens, startIdx, endIdx)
+	machine.nextDataIdx = 0
 end function
 
 Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
@@ -1064,6 +1088,7 @@ end function
 
 Machine.runProgram = function
 	self.sortLines
+	self.findData
 	self.halt = false
 	self.lineIdx = 0
 	self.inThen = false
@@ -1075,6 +1100,27 @@ end function
 Machine.sortLines = function
 	self.lineNums = self.program.indexes
 	self.lineNums.sort
+end function
+
+// Gather all the data tokens in DATA statements into our Machine.data
+// array.  NOTE: assumes that our lineNums array is up-to-date (i.e.
+// that sortLines has already been called).
+Machine.findData = function
+	self.data = []
+	for lineNum in self.lineNums
+		line = self.program[lineNum]
+		pos = 0
+		while pos < line.len
+			endPos = line.indexOf(":", pos)
+			if endPos == null then endPos = line.len
+			if line[pos] == "DATA" then
+				for p in range(pos+1, endPos-1)
+					if line[p] != "," then self.data.push line[p]
+				end for
+			end if
+			pos = endPos + 1
+		end while
+	end for
 end function
 
 Machine.findComeFroms = function
@@ -1187,6 +1233,8 @@ repl "80 END"
 repl "100 REM Test Subroutine"
 repl "110 print: print ""====="": print"
 repl "120 return"
+repl "90 DATA ""hello bob"", 123.45, -43"
+repl "200 DATA 42, test, ""test with space"""
 repl "list"
 
 basic = function

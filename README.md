@@ -42,6 +42,7 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `COLOR` _n_ (pick a color 0-15; or pass a color hex string)
   - `PLOT` _x_, _y_, (plot a single pixel, and set the plot position)
   - `LINE` _x_, _y_, (draw a line from the last plot/line position)
+  - `DATA`, `READ`, and `RESTORE'
 
 ## Features Still To Come ##
 
@@ -52,7 +53,6 @@ This is a little project to create an interpreter for the BASIC programming lang
 - support for multidimensional arrays
 - distinction between string and numeric variables
 - standard BASIC commands:
-  - `DATA`, `READ`, and `RESTORE'
   - `DEF FN`
 
 ## Sample Programs
