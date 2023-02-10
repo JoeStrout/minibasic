@@ -32,17 +32,17 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `END`
   - `REM`
   - `CLEAR` (resets all variables)
+  - `DATA`, `READ`, and `RESTORE'
 - standard(ish) BASIC functions:
   - `INT`, `STR`, `VAL`
   - `ABS`, `SGN`, etc.
   - `RND`
-  - `TAB` (sets horizontal cursor position, then returns "")
+  - `TAB` (sets cursor position, then returns "")
 - nonstandard BASIC commands:
   - `HOME` or `CLS` (clears the screen and resets the cursor)
   - `COLOR` _n_ (pick a color 0-15; or pass a color hex string)
   - `PLOT` _x_, _y_, (plot a single pixel, and set the plot position)
   - `LINE` _x_, _y_, (draw a line from the last plot/line position)
-  - `DATA`, `READ`, and `RESTORE'
 
 ## Features Still To Come ##
 
@@ -52,13 +52,31 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `RENUMBER`
 - support for multidimensional arrays
 - distinction between string and numeric variables
+- weird PRINT syntax that lets you just list expressions with no delimiters between them
+- SOUND command, and more drawing commands
 - standard BASIC commands:
   - `DEF FN`
 
 ## Sample Programs
 
-Included in the _programs_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Most of these don't work yet, though a few of them (like "chemist") do.
+Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Most of these don't work yet, though a few of them (like "chemist") do.
 
+I'm also starting a second collection of programs written specifically for MiniBASIC, or adapted from other sources.  The programs/text subdirectory contains the first of these.
+
+## Try It Yourself!
+
+To run this code requires at least a preview release of Mini Micro 1.2 (because it uses some of the latest features of the MiniScript language).  So:
+
+1. grab a preview build of Mini Micro 1.2 for [Mac](https://miniscript.org/MiniMicro/preview/minimicro-mac.zip), [Windows](https://miniscript.org/MiniMicro/preview/minimicro-win.zip), or [Linux](https://miniscript.org/MiniMicro/preview/minimicro-linux.tar.gz)
+2. unpack this, and run (you might need to right-click an "open" the first time, as the app is not yet code-signed)
+3. download or clone this repo
+4. in Mini Micro, click on the top disk slot below the screen, and choose "Mount Folder..."
+5. select the folder containing this README.md and basic.ms
+6. type `reboot` at the Mini Micro prompt (or quit and relaunch)
+
+That should do it!  Now whenever Mini Micro starts up, it should go straight into MiniBASIC, which you can recognize by the `>` prompt.
+
+If something goes wrong, MiniBASIC may crash, and drop you out into the MiniScript (recognizable by the ']' prompt).  In that case, just type `basic` to restart MiniBASIC (or, `reboot` if all else fails).
 
 ## References
 
