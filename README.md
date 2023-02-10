@@ -76,7 +76,7 @@ To run this code requires at least a preview release of Mini Micro 1.2 (because 
 
 That should do it!  Now whenever Mini Micro starts up, it should go straight into MiniBASIC, which you can recognize by the `>` prompt.
 
-If something goes wrong, MiniBASIC may crash, and drop you out into the MiniScript (recognizable by the ']' prompt).  In that case, just type `basic` to restart MiniBASIC (or, `reboot` if all else fails).
+If something goes wrong, MiniBASIC may crash, and drop you out into the MiniScript (recognizable by the `]` prompt).  In that case, just type `basic` to restart MiniBASIC (or, `reboot` if all else fails).
 
 ## References
 
