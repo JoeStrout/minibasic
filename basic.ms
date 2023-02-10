@@ -69,6 +69,7 @@ list.indexOfAny = function(options, afterIdx=-1, defaultIfNotFound=null)
 	if bestResult != null then return bestResult
 	return defaultIfNotFound
 end function
+string.indexOfAny = @list.indexOfAny	// works for both!  :)
 
 // findCloser: find the closing element that comes after the given
 // opening position, properly skipping over nested pairs.  Note
@@ -142,6 +143,10 @@ end function
 
 isStringId = function(s)
 	return isIdentifier(s) and s[-1] == "$"
+end function
+
+isStringLiteral = function(s)
+	return s isa string and s and s[0] == """" and s[-1] == """"
 end function
 
 // Check tokens starting at startPos for one of these patterns:
@@ -245,12 +250,12 @@ tokenize = function(line)
 	end while
 	if tokens.len > 1 then
 		// As a final pass, check for "-" before a number and after anything
-		// except an identifier or number.  In that case, combine it with the
-		// number (making it negative).  Also, combine '(' with a previous
+		// except an identifier, number, or right paren.  In that case, combine it
+		// with the number (making it negative).  Also, combine '(' with a previous
 		// identifier (this is a function call).
 		for i in range(tokens.len-2, 0)
 			if tokens[i] == "-" and tokens[i+1] isa number and
-			  not (i > 0 and (tokens[i-1] isa number or isIdentifier(tokens[i-1]))) then
+			  not (i > 0 and (tokens[i-1] isa number or tokens[i-1]==")" or isIdentifier(tokens[i-1]))) then
 				tokens[i+1] = -tokens[i+1]
 				tokens.remove i
 			else if tokens[i+1] == "(" and isIdentifier(tokens[i]) then
@@ -739,6 +744,10 @@ Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
 	text.color = gfx.color
 end function
 
+Machine.cmd.DATA = function(tokens, startIdx, endIdx)
+	// no action needed!
+end function
+
 Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
 	pos = startIdx + 1
@@ -801,7 +810,7 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
-	if endIdx != startIdx + 2 or not (tokens[1] isa number) then
+	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOSUB")
 	end if
 	returnTo = new ReturnStackEntry
@@ -816,7 +825,7 @@ Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.GOTO = function(tokens, startIdx, endIdx)
-	if endIdx != startIdx + 2 or not (tokens[1] isa number) then
+	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOTO")
 	end if
 	machine.goTo tokens[startIdx+1]
@@ -894,16 +903,73 @@ Machine.cmd.IF = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
-	var = null
-	if endIdx > startIdx + 1 then
-		var = tokens[startIdx + 1]
+	// Another quirky function (http://basic4all.epizy.com/index.php?topic=372).
+	// Our version:
+	//		- prints "?" if no prompt, or if prompt is followed by ";"
+	//		- add nothing to the prompt if followed by ","
+	//		- when inputting a number, trims and stops at whitespace or comma
+	//		- when inputting a string, stops at comma UNLESS it is the last
+	//		  variable in the input list, in which case it continues to EOL 
+	
+	pos = startIdx + 1
+
+	// Start by finding the prompt
+	if pos < endIdx and isStringLiteral(tokens[pos]) then
+		prompt = stripQuotes(tokens[pos])
+		if endIdx <= startIdx+3 then return printErr("incomplete INPUT statement")
+		if tokens[pos+1] != "," and tokens[pos+1] != ";" then printErr("comma or semicolon expected")
+		if tokens[pos+1] == ";" then prompt += "?"
+		pos += 2
+	else
+		prompt = "?"
+	end if
+	
+	// Now, loop over variables, gathering input for each one, asking for more as needed
+	remainingInput = ""
+	while pos < endIdx
+		var = tokens[pos]
 		if not isIdentifier(var) then return printErr("invalid identifier for INPUT")
-	end if
-	value = input("?")
-	if var then
-		if var[-1] != "$" then value = value.val
-		machine.vars[var] = value
-	end if
+		arrIndex = null
+		if var[-1] == "(" then
+			closePos = tokens.findCloseParen(pos+1, endIdx)
+			if closePos == null then return printErr("unbalanced parentheses")
+			arrIndex = evalTokens(tokens[pos+1:closePos])
+			if not arrIndex isa number then return printErr("array index must be a number")
+			var = var[:-1]
+			if not machine.arrs.hasIndex(var) then return printErr("undefined array " + var)
+			pos = closePos
+		end if
+		varIsNumeric = isNumericId(var)
+		while not remainingInput
+			remainingInput = input(prompt)
+			if varIsNumeric then remainingInput = remainingInput.trimLeft
+			prompt = "??"
+		end while
+		if varIsNumeric then
+			// numeric var: grab up to the next whitespace or comma
+			delimPos = remainingInput.indexOfAny(", ", -1, remainingInput.len)
+			value = val(remainingInput[:delimPos])
+			remainingInput = remainingInput[delimPos+1:].trimLeft
+		else
+			// string var: grab up to the next comma, unless this is the final variable
+			if pos < endIdx-1 then
+				delimPos = remainingInput.indexOfAny(", ", -1, remainingInput.len)
+				value = remainingInput[:delimPos]
+				remainingInput = remainingInput[delimPos+1:]
+			else
+				value = remainingInput
+				remainingInput = ""
+			end if
+		end if
+		if arrIndex == null then
+			machine.vars[var] = value
+		else
+			machine.arrs[var][arrIndex] = value
+		end if
+		if pos+1 >= endIdx then break
+		if tokens[pos+1] != "," then printErr("comma expected")
+		pos += 2
+	end while
 end function
 
 Machine.cmd.LET = function(tokens, startIdx, endIdx)
@@ -1016,12 +1082,27 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 	while pos < endIdx
 		var = tokens[pos]
 		if not isIdentifier(var) then return printErr("invalid identifier for READ")
+		arrIndex = null
+		if var[-1] == "(" then
+			closePos = tokens.findCloseParen(pos+1, endIdx)
+			if closePos == null then return printErr("unbalanced parentheses")
+			arrIndex = evalTokens(tokens[pos+1:closePos])
+			if not arrIndex isa number then return printErr("array index must be a number")
+			var = var[:-1]
+			if not machine.arrs.hasIndex(var) then return printErr("undefined array " + var)
+			pos = closePos
+		end if
+
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
 		machine.nextDataIdx += 1
 		if var then
 			if var[-1] != "$" then value = val(value)
-			machine.vars[var] = value
+			if arrIndex == null then
+				machine.vars[var] = value
+			else
+				machine.arrs[var][arrIndex] = value
+			end if
 		end if
 		if pos+2 >= endIdx or tokens[pos+1] != "," then break
 		pos += 2
@@ -1196,6 +1277,7 @@ Machine.reset = function
 	self.lineNums = []
 	self.lineIdx = 0
 	self.vars = {}
+	self.arrs = {}
 	self.forLoops = []
 	self.plotPos = [0,0]
 end function
@@ -1224,6 +1306,7 @@ runUnitTests = function
 	assertEqual tokenize("5*-2"), [5, "*", -2]
 	assertEqual tokenize("5--2"), [5, "-", -2]
 	assertEqual tokenize("INT (6 * RND(1))"), ["INT(", 6, "*", "RND(", 1, ")", ")"]
+	assertEqual tokenize("B(J)=A1(J)-48"), ["B(", "J", ")", "=", "A1(", "J", ")", "-", 48]
 	
 	a = tokenize("INT (6 * RND(1))")
 	assertEqual a.indexOfAny([")", "*"]), 2
@@ -1232,6 +1315,7 @@ runUnitTests = function
 	assertEqual a.indexOfAny([")", "*"], 6), null
 	assertEqual a.indexOfAny([")", "*"], 6, -1), -1
 	assertEqual a.findCloseParen(1), 6
+	
 	
 	a = tokenize("PRINT LEFT$(A$,5), MID$(A$,LEN(A$)/2), RIGHT$(A$,F(X,4))")
 	assertEqual a.indexOfAnyParenSavvy(","), 6
