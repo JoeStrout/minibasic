@@ -11,7 +11,7 @@ import "mathUtil"
 
 // Keywords, including all BASIC commands (but not including functions,
 // which are defined as part of the Machine class):
-keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM".split +
+keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
   "CLS HOME HTAB VTAB COLOR LINE PLOT".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
@@ -97,7 +97,7 @@ list.findCloseParen = function(startIdx=0, endIndex=null)
 	pos = startIdx
 	numOpen = 0
 	while pos < endIndex
-		if self[pos] isa string and self[pos][-1] == "(" then
+		if isOpenParen(self[pos]) then
 			numOpen += 1
 		else if self[pos] == ")" then
 			numOpen -= 1
@@ -121,7 +121,7 @@ list.indexOfAnyParenSavvy = function(options, afterIdx=-1, endIndex=null, defaul
 	while pos < endIndex
 		item = self[pos]
 		if numOpen == 0 and options.contains(item) then return pos
-		if item isa string and item[-1] == "(" then
+		if isOpenParen(item) then
 			numOpen += 1
 		else if item == ")" then
 			numOpen -= 1
@@ -147,6 +147,10 @@ end function
 
 isStringLiteral = function(s)
 	return s isa string and s and s[0] == """" and s[-1] == """"
+end function
+
+isOpenParen = function(tok)
+	return tok isa string and tok and tok[-1] == "("
 end function
 
 // Check tokens starting at startPos for one of these patterns:
@@ -251,14 +255,19 @@ tokenize = function(line)
 	if tokens.len > 1 then
 		// As a final pass, check for "-" before a number and after anything
 		// except an identifier, number, or right paren.  In that case, combine it
-		// with the number (making it negative).  Also, combine '(' with a previous
-		// identifier (this is a function call).
+		// with the number (making it negative).  Also combine "FN" with the following
+		// identifier (these are user-defined functions).  Also, combine '(' with a 
+		// previous identifier (this is a function call).
 		for i in range(tokens.len-2, 0)
 			if tokens[i] == "-" and tokens[i+1] isa number and
 			  not (i > 0 and (tokens[i-1] isa number or tokens[i-1]==")" or isIdentifier(tokens[i-1]))) then
 				tokens[i+1] = -tokens[i+1]
 				tokens.remove i
-			else if tokens[i+1] == "(" and isIdentifier(tokens[i]) then
+			else if tokens[i] == "FN" and tokens[i+1] isa string then
+				tokens[i] = tokens[i] + " " + tokens[i+1]
+				tokens.remove i+1
+			end if
+			if i+1 < tokens.len and tokens[i+1] == "(" and isIdentifier(tokens[i]) then
 				tokens[i] = tokens[i].upper + "("
 				tokens.remove i+1
 			end if
@@ -273,7 +282,7 @@ end function
 
 // evalTokens: evaluate a tokenized expression.
 //  For example, given [6, "*", 7], return 42.
-evalTokens = function(tokens)
+evalTokens = function(tokens, customLocals)
 
 	debugPrint = function(s)
 		//text.color = "#008800"; print s; text.color = gfx.color
@@ -347,7 +356,7 @@ evalTokens = function(tokens)
 	pullCall = function
 		pos = stack.len - 1
 		while pos >= 0
-			if stack[pos] isa string and stack[pos][-1] == "(" then
+			if isOpenParen(stack[pos]) then
 				// found it!  Grab the function and arguments, with commas...
 				result = stack[pos:]
 				// strip out the commas...
@@ -371,8 +380,8 @@ evalTokens = function(tokens)
 		debugPrint "Collapsing stack: " + stack
 		while stack.len > 1
 			if stack[-2] == "," then return
-			if stack[-2] isa string and stack[-2][-1] == "(" then return			
-			if stack[-2] == "NOT" or (stack.len > 2 and stack[-3][-1] == "(") then
+			if isOpenParen(stack[-2]) then return
+			if stack[-2] == "NOT" or (stack.len > 2 and isOpenParen(stack[-3])) then
 				doUnaryOp
 			else if stack.len > 2 then
 				doBinop
@@ -444,19 +453,24 @@ evalTokens = function(tokens)
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
-			while stack.len >= 3
-				// process any higher-precedence operators already on the stack
-				prevOpIdx = -1
-				if stack.len > 1 then prevOpIdx = operators.indexOf(stack[-2])
-				if opIdx > prevOpIdx then break
-				doBinop
-			end while
+			if stack and not isOpenParen(stack[-1]) then
+				while stack.len >= 3
+					// process any higher-precedence operators already on the stack
+					prevOpIdx = -1
+					if stack.len > 1 then prevOpIdx = operators.indexOf(stack[-2])
+					debugPrint "at op " + opIdx + ", considering " + prevOpIdx
+					if opIdx > prevOpIdx then break
+					doBinop
+				end while
+			end if
 			// then push the new operator
 			stack.push tok
 			//print "Pushed operator: " + tok
 		else
 			// push the value of identifier
-			if not machine.vars.hasIndex(tok) then
+			if customLocals != null and customLocals.hasIndex(tok) then
+				value = customLocals[tok]
+			else if not machine.vars.hasIndex(tok) then
 				// old BASICS assume a null value for undefined variables
 				if tok.endsWith("$") then value = "" else value = 0
 			else
@@ -624,6 +638,8 @@ repl = function(line)
 	end if
 end function
 
+// ForLoopState: represents the state of one active FOR loop,
+// including the loop variable, loop bounds, step, etc.
 ForLoopState = {}
 ForLoopState.var = ""
 ForLoopState.step = 1
@@ -640,9 +656,47 @@ ForLoopState.make = function(var, limit, step, topLine, topToken)
 	return fls
 end function
 
+// ReturnStackEntry: where a GOSUB came from (and returns to).
 ReturnStackEntry = {}
 ReturnStackEntry.lineIdx = 0
 ReturnStackEntry.tokenIdx = 0
+
+// Lvar class: represents a value on the left-hand side of an 
+// assignment, i.e., something that can be assigned a value.  This is
+// either a regular variable reference, or an array + index.
+Lvar = {}
+Lvar.isArrayElem = false
+Lvar.id = ""			// identifier, i.e. variable or array name
+Lvar.index = null		// index value, in the case of an array element
+
+// make an Lvar from the given set of tokens, starting at startPos
+// (which should be the identifier) and going up to endPos (which 
+// should be the first position after the `)` or variable name).
+Lvar.make = function(tokens, startPos, endPos, dummyArg=false)
+	lvar = new Lvar
+	lvar.id = tokens[startPos]
+	if not isIdentifier(lvar.id) then return printErr("identifier expected")
+	if isOpenParen(lvar.id) then
+		if tokens[endPos-1] != ")" then return printErr("unmatched parentheses")
+		lvar.id = lvar.id[:-1]
+		lvar.isArrayElem = true
+		globals.wtf = tokens
+		if dummyArg then
+			if startPos+1 != endPos-2 or
+			 not isIdentifier(tokens[startPos+1]) then return printErr("invalid dummy argument")
+			lvar.index = tokens[startPos+1]
+		else
+			lvar.index = evalTokens(tokens[startPos+1:endPos-1])
+			if not lvar.index isa number then return printErr("array index must be a number")
+		end if
+	else
+		if endPos > startPos+1 then return printErr("syntax error")
+	end if
+	if lvar.id isa number or lvar.id[0] == """" then return printErr("can't assign to constant")
+	if keywords.contains(lvar) then return printErr("can't assign to keyword")
+	return lvar
+end function
+
 
 // Machine State:
 Machine = {}
@@ -659,6 +713,32 @@ Machine.data = []			// collected data from DATA statements
 Machine.nextDataIdx = 0		// which element of self.data to READ next
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
+
+// Assign a value to the given lvar.  Returns true on success,
+// false if failed.
+Machine.assignLvar = function(lvar, value)
+	if isNumericId(lvar.id) then value = val(value)
+	if lvar.isArrayElem then
+		if not self.arrs.hasIndex(lvar.id) then
+			printErr "invalid array name " + lvar.id
+			return false
+		end if
+		if not lvar.index isa number then
+			printErr "array index must be a number"
+			return false
+		end if
+		arr = self.arrs[lvar.id]
+		if lvar.index < 0 or lvar.index >= arr.len then
+			printErr "array index out of bounds"
+			return false
+		end if
+		arr[lvar.index] = value
+	else
+		self.vars[lvar.id] = value
+	end if
+	return true
+end function
+
 
 // Define all the built-in functions
 // (in alphabetical order below)
@@ -711,7 +791,7 @@ Machine.fn.TAB = function(n)
 		// With just 1 argument, it's column, and we move
 		// only if the current position is left of that.
 		n = val(n)
-		if n < text.column then text.column = n - 1; 
+		if n > text.column then text.column = n - 1; 
 	end if
 	return ""
 end function
@@ -748,13 +828,36 @@ Machine.cmd.DATA = function(tokens, startIdx, endIdx)
 	// no action needed!
 end function
 
+Machine.cmd.DEF = function(tokens, startIdx, endIdx)
+	startIdx += 1	// skip DEF
+	// grab the function name and dummy argument
+	varEndPos = startIdx + 1
+	if isOpenParen(tokens[startIdx]) then
+		varEndPos = tokens.findCloseParen(startIdx+1, endIdx) + 1
+		if varEndPos == null then return printErr("unmatched parentheses")
+	end if
+	lvar = Lvar.make(tokens, startIdx, varEndPos, true)
+	if lvar == null then return
+	if not lvar.isArrayElem then return printErr("user function requires 1 argument")
+	// next should be the `=`
+	if varEndPos >= endIdx or tokens[varEndPos] != "=" then return printErr("incomplete DEF FN")
+	// and the rest of the line is the expression
+	exprToks = tokens[varEndPos+1:endIdx]
+	if not exprToks then return printErr("incomplete DEF FN")
+	
+	// Now, build a function and stuff it into the machine.
+	machine.fn[lvar.id] = function(arg)
+		return evalTokens(exprToks, {lvar.index:arg})
+	end function
+end function
+
 Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
 	pos = startIdx + 1
 	while pos < endIdx
 		name = tokens[pos]
 		maxIndex = null
-		if name[-1] == "(" then
+		if isOpenParen(name) then
 			name = name[:-1]
 			if pos+2 >= endIdx then return printErr("incomplete DIM statement")
 			maxIndex = tokens[pos+1]
@@ -927,19 +1030,15 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 	// Now, loop over variables, gathering input for each one, asking for more as needed
 	remainingInput = ""
 	while pos < endIdx
-		var = tokens[pos]
-		if not isIdentifier(var) then return printErr("invalid identifier for INPUT")
-		arrIndex = null
-		if var[-1] == "(" then
-			closePos = tokens.findCloseParen(pos+1, endIdx)
-			if closePos == null then return printErr("unbalanced parentheses")
-			arrIndex = evalTokens(tokens[pos+1:closePos])
-			if not arrIndex isa number then return printErr("array index must be a number")
-			var = var[:-1]
-			if not machine.arrs.hasIndex(var) then return printErr("undefined array " + var)
-			pos = closePos
+		varEndPos = pos + 1
+		if isOpenParen(tokens[pos]) then
+			varEndPos = tokens.findCloseParen(pos+1, endIdx) + 1
+			if varEndPos == null then return printErr("unmatched parentheses")
 		end if
-		varIsNumeric = isNumericId(var)
+		lvar = Lvar.make(tokens, pos, varEndPos)
+		if lvar == null then return
+
+		varIsNumeric = isNumericId(lvar.id)
 		while not remainingInput
 			remainingInput = input(prompt)
 			if varIsNumeric then remainingInput = remainingInput.trimLeft
@@ -961,45 +1060,25 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 				remainingInput = ""
 			end if
 		end if
-		if arrIndex == null then
-			machine.vars[var] = value
-		else
-			machine.arrs[var][arrIndex] = value
-		end if
-		if pos+1 >= endIdx then break
-		if tokens[pos+1] != "," then printErr("comma expected")
-		pos += 2
+		machine.assignLvar lvar, value
+		if varEndPos >= endIdx then break
+		if tokens[varEndPos] != "," then printErr("comma expected")
+		pos = varEndPos + 1
 	end while
 end function
 
 Machine.cmd.LET = function(tokens, startIdx, endIdx)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
-	lvar = tokens[startIdx]
-	if lvar isa number or lvar[0] == """" then
-		return printErr("can't assign to constant")
+	varEndPos = startIdx + 1
+	if isOpenParen(tokens[startIdx]) then
+		varEndPos = tokens.findCloseParen(startIdx+1, endIdx) + 1
+		if varEndPos == null then return printErr("unmatched parentheses")
 	end if
-	if keywords.contains(lvar) then return printErr("can't assign to keyword")
-	if lvar[-1] == "(" then
-		// array element assignment
-		// ToDo: rework this when our expression parser can report
-		// how much it consumed.  For now:
-		closeParenIdx = tokens.indexOf(")", startIdx+1)
-		if closeParenIdx == null or endIdx < closeParenIdx+2 or tokens[closeParenIdx+1] != "=" then
-			return printErr("incomplete LET statement")
-		end if
-		index = evalTokens(tokens[startIdx+1:closeParenIdx])
-		lvar = lvar[:-1]
-		array = machine.arrs.get(lvar)
-		if array == null then return printErr("No array " + lvar + " has been DIMensioned")
-		if index < 0 or index >= array.len then printErr("Out of bounds error on " + lvar)
-		array[index] = evalTokens(tokens[closeParenIdx+2:endIdx])
-	else
-		// normal (scalar) assignment
-		if endIdx < startIdx+2 or tokens[startIdx+1] != "=" then
-			return printErr("incomplete LET statement")
-		end if
-		machine.vars[lvar] = evalTokens(tokens[startIdx+2:endIdx])
-	end if
+	lvar = Lvar.make(tokens, startIdx, varEndPos)
+	if lvar == null then return
+	
+	if tokens[varEndPos] != "=" then return printErr("syntax error in assignment")
+	machine.assignLvar lvar, evalTokens(tokens[varEndPos+1:endIdx])
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
@@ -1080,32 +1159,20 @@ end function
 Machine.cmd.READ = function(tokens, startIdx, endIdx)
 	pos = startIdx + 1
 	while pos < endIdx
-		var = tokens[pos]
-		if not isIdentifier(var) then return printErr("invalid identifier for READ")
-		arrIndex = null
-		if var[-1] == "(" then
-			closePos = tokens.findCloseParen(pos+1, endIdx)
-			if closePos == null then return printErr("unbalanced parentheses")
-			arrIndex = evalTokens(tokens[pos+1:closePos])
-			if not arrIndex isa number then return printErr("array index must be a number")
-			var = var[:-1]
-			if not machine.arrs.hasIndex(var) then return printErr("undefined array " + var)
-			pos = closePos
+		varEndPos = pos + 1
+		if isOpenParen(tokens[pos]) then
+			varEndPos = tokens.findCloseParen(pos+1, endIdx) + 1
+			if varEndPos == null then return printErr("unmatched parentheses")
 		end if
+		lvar = Lvar.make(tokens, pos, varEndPos)
+		if lvar == null then return
 
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
 		machine.nextDataIdx += 1
-		if var then
-			if var[-1] != "$" then value = val(value)
-			if arrIndex == null then
-				machine.vars[var] = value
-			else
-				machine.arrs[var][arrIndex] = value
-			end if
-		end if
-		if pos+2 >= endIdx or tokens[pos+1] != "," then break
-		pos += 2
+		machine.assignLvar lvar, value
+		if varEndPos >= endIdx or tokens[varEndPos] != "," then break
+		pos = varEndPos + 1
 	end while
 end function
 
@@ -1139,7 +1206,7 @@ Machine.runOneStatement = function(tokens, startTokenIndex)
 	cmd = tokens[startTokenIndex]
 	if isIdentifier(cmd) then
 		// check for the special case of an assignment statement without LET
-		if cmd[-1] == "(" then
+		if isOpenParen(cmd) then
 			assignPos = tokens.findCloseParen(startTokenIndex + 1) + 1
 		else
 			assignPos = startTokenIndex + 1
