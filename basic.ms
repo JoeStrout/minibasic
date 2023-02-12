@@ -153,6 +153,21 @@ isOpenParen = function(tok)
 	return tok isa string and tok and tok[-1] == "("
 end function
 
+// Make a multidimensional array, whose dimensions are defined
+// by the given list.  E.g. when dims == [10,20,30], then the
+// top-level resulting list has 11 elements (index 0 through 10),
+// each of those has 21 elements, and each of *those* has 31
+// elements initially set to the given defaultValue.
+makeMultiDimArray = function(dims, defaultValue)
+	if dims.len == 1 then return [defaultValue] * (dims[0] + 1)
+	result = []
+	remainingDims = dims[1:]
+	for idx in range(0, dims[0])
+		result.push makeMultiDimArray(remainingDims, defaultValue)
+	end for
+	return result
+end function
+
 // Check tokens starting at startPos for one of these patterns:
 //	fromNum, "-", toNum
 //	"-", toNum
@@ -296,6 +311,7 @@ Evaluator.make = function(tokens, startIdx=0, endIdx=null)
 end function
 
 Evaluator.debugPrint = function(s)
+	// Uncomment this line to see lots of helpful debugging output:
 	//text.color = "#008800"; print s; text.color = gfx.color
 end function
 
@@ -382,6 +398,35 @@ Evaluator.pullCall = function
 	return null
 end function
 
+// Evaluate a function call or array lookup, represented as a 
+// list of the sort returned by pullCall (above).  Push the 
+// result onto the stack.
+Evaluator.doCallOrArray = function(call)
+	self.debugPrint "Evaluating a call: " + call
+	funcOrArrayName = call[0][:-1]
+	args = call[1:]
+	f = machine.fn.get(funcOrArrayName)
+	array = machine.arrs.get(funcOrArrayName)
+	if @f then
+		// it's a function — invoke it!
+ 		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
+ 		self.stack.push f(args)
+	else if array != null then
+		// it's an array; look up the value (walking through dimensions
+		// of the array one at a time, until we have just a scalar left)
+		for idx in args
+			if not array isa list then return printErr("too many array indexes")
+			if not idx isa number then return printErr("array index must be numeric")
+			if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
+			array = array[idx]
+		end for
+		if array isa list then return printErr("not enough array indexes")
+		self.stack.push array
+	else
+		return printErr("unknown function or array " + funcOrArrayName)
+	end if
+end function
+
 // Collapse any binary and unary operators on the top of 
 // the stack.  This should proceed until we hit either the
 // bottom of the stack, or an open paren, or a comma.
@@ -435,24 +480,10 @@ Evaluator.evaluate = function(customLocals=null)
 				// ...in this case, we just remove the open paren and we're done
 				self.stack.remove self.stack.len-2
 			else
-				// otherwise, it should be a call
+				// otherwise, it should be a call (or array lookup)
 				call = self.pullCall
 				if call then
-					self.debugPrint "Evaluating a call: " + call
-					funcOrArrayName = call[0][:-1]
-					args = call[1:]; if args.len == 1 then args = args[0]
-					f = machine.fn.get(funcOrArrayName)
-					array = machine.arrs.get(funcOrArrayName)
-					if @f then
-						self.stack.push f(args)
-					else if array != null then
-						idx = args
-						if not idx isa number then return printErr("array index must be numeric")
-						if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
-						self.stack.push array[idx]
-					else
-						return printErr("unknown function or array " + funcOrArrayName)
-					end if
+					self.doCallOrArray call
 				else if self.stack.len < 3 then
 					return printErr("unmatched parentheses")
 				end if
@@ -712,14 +743,17 @@ Lvar.make = function(tokens, startPos, endPos, dummyArg=false)
 		if tokens[endPos-1] != ")" then return printErr("unmatched parentheses")
 		lvar.id = lvar.id[:-1]
 		lvar.isArrayElem = true
-		globals.wtf = tokens
 		if dummyArg then
 			if startPos+1 != endPos-2 or
 			 not isIdentifier(tokens[startPos+1]) then return printErr("invalid dummy argument")
 			lvar.index = tokens[startPos+1]
 		else
-			lvar.index = evalTokens(tokens[startPos+1:endPos-1])
-			if not lvar.index isa number then return printErr("array index must be a number")
+			lvar.index = []
+			for indexTokens in tokens[startPos+1:endPos-1].split(",")
+				idx = evalTokens(indexTokens)
+				if not idx isa number then return printErr("array index must be a number")
+				lvar.index.push idx
+			end for
 		end if
 	else
 		if endPos > startPos+1 then return printErr("syntax error")
@@ -755,16 +789,29 @@ Machine.assignLvar = function(lvar, value)
 			printErr "invalid array name " + lvar.id
 			return false
 		end if
-		if not lvar.index isa number then
+		arr = self.arrs[lvar.id]
+		index = lvar.index
+		if index isa list then
+			// dereference all but the LAST index 
+			// (which we'll use to assign the new value)
+			for idx in index[:-1]
+				if idx < 0 or idx >= arr.len then
+					printErr "array index out of bounds"
+					return false
+				end if
+				arr = arr[idx]
+			end for
+			index = index[-1]
+		end if		
+		if not index isa number then
 			printErr "array index must be a number"
 			return false
 		end if
-		arr = self.arrs[lvar.id]
-		if lvar.index < 0 or lvar.index >= arr.len then
+		if index < 0 or index >= arr.len then
 			printErr "array index out of bounds"
 			return false
 		end if
-		arr[lvar.index] = value
+		arr[index] = value
 	else
 		self.vars[lvar.id] = value
 	end if
@@ -890,25 +937,31 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 	pos = startIdx + 1
 	while pos < endIdx
 		name = tokens[pos]
-		maxIndex = null
+		dims = [10]	// default to one dimension, max index of 10
+		pos += 1
 		if isOpenParen(name) then
 			name = name[:-1]
 			if pos+2 >= endIdx then return printErr("incomplete DIM statement")
-			maxIndex = tokens[pos+1]
-			if not maxIndex isa number then return printErr("DIM size must be a number")
-			if tokens[pos+2] != ")" then return printErr("incomplete DIM statement")
-			pos += 3
-		else
-			// no dimension given; default to 10
-			maxIndex = 10
-			pos += 1
+			dims = []
+			// ToDo: find close paren, split on ",", and then evaluate each one
+			// so we can have variables or expressions used as the dimensions.
+			while pos+1 < endIdx
+				maxIndex = tokens[pos]
+				if maxIndex == ")" then break
+				if not maxIndex isa number then return printErr("DIM size must be a number")
+				dims.push maxIndex
+				if tokens[pos+1] != "," and tokens[pos+1] != ")" then return printErr("syntax error in DIM statement")
+				pos += 2
+			end while
+			if pos < endIdx and tokens[pos] != ")" then return printErr("incomplete DIM statement")
 		end if
 		if not isIdentifier(name) then return printErr("identifier expected in DIM statement")
 		if machine.arrs.hasIndex(name) then return printErr("array " + name + " already DIMensioned")
+
 		if isNumericId(name) then
-			machine.arrs[name] = [0] * (maxIndex+1)
+			machine.arrs[name] = makeMultiDimArray(dims, 0)
 		else
-			machine.arrs[name] = [""] * (maxIndex+1)
+			machine.arrs[name] = makeMultiDimArray(dims, "")
 		end if
 		if pos < endIdx and tokens[pos] == "," then pos += 1
 	end while

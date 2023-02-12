@@ -14,6 +14,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 - support for multiple statements on one line, separated by `:`
 - one-dimensional arrays
 - weird PRINT syntax that lets you just list expressions with no delimiters between them
+- support for multidimensional arrays
 - program management:
   - `NEW`
   - `LIST` (note: not yet with range of line numbers)
@@ -54,12 +55,12 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `SAVE`
   - `RENAME`
   - `RENUMBER`
-- support for multidimensional arrays
-- distinction between string and numeric variables
+- full typechecking (between string and numeric variables)
+- `REDIM`
 
 ## Sample Programs
 
-Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Some of these still don't work yet (mostly because of multidimensional arrays), but most of them do.
+Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Some of these still don't work yet, but most of them do.
 
 I'm also starting a second collection of programs written specifically for MiniBASIC, or adapted from other sources.  The programs/text subdirectory contains the first of these.
 
