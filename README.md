@@ -57,6 +57,7 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `RENUMBER`
 - full typechecking (between string and numeric variables)
 - `REDIM`
+- `ON`...`GOTO`
 
 ## Sample Programs
 

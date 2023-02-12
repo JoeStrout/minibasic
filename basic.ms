@@ -305,6 +305,7 @@ Evaluator.make = function(tokens, startIdx=0, endIdx=null)
 	eval = new Evaluator
 	eval.tokens = tokens
 	eval.startIdx = startIdx
+	eval.nextTokIdx = startIdx
 	if endIdx == null then eval.endIdx = tokens.len else eval.endIdx = endIdx
 	eval.stack = []
 	return eval
@@ -941,19 +942,18 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 		pos += 1
 		if isOpenParen(name) then
 			name = name[:-1]
-			if pos+2 >= endIdx then return printErr("incomplete DIM statement")
+			if pos+2 >= endIdx then return printErr("incomplete DIM statement 1")
 			dims = []
-			// ToDo: find close paren, split on ",", and then evaluate each one
-			// so we can have variables or expressions used as the dimensions.
 			while pos+1 < endIdx
-				maxIndex = tokens[pos]
-				if maxIndex == ")" then break
+				nextPos = tokens.indexOfAnyParenSavvy([",", ")"], pos, endIdx)
+				if nextPos == null then return printErr("incomplete DIM statement 2")
+				maxIndex = Evaluator.make(tokens, pos, nextPos).evaluate
 				if not maxIndex isa number then return printErr("DIM size must be a number")
 				dims.push maxIndex
-				if tokens[pos+1] != "," and tokens[pos+1] != ")" then return printErr("syntax error in DIM statement")
-				pos += 2
+				pos = nextPos+1
+				if tokens[nextPos] == ")" then break
+				if tokens[nextPos] != "," then return printErr("syntax error in DIM statement")
 			end while
-			if pos < endIdx and tokens[pos] != ")" then return printErr("incomplete DIM statement")
 		end if
 		if not isIdentifier(name) then return printErr("identifier expected in DIM statement")
 		if machine.arrs.hasIndex(name) then return printErr("array " + name + " already DIMensioned")
