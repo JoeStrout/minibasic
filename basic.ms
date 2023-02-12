@@ -799,7 +799,9 @@ Machine.fn["MID$"] = function(args)
 	if args.len > 2 then length = args[2] else length = s.len
 	return s[startPos-1:startPos-1+length]
 end function
-Machine.fn.POS = function(z); return text.column; end function
+Machine.fn.POS = function(z)
+	if round(z) % 2 then return 26 - text.row else return text.column + 1
+end function
 Machine.fn["RIGHT$"] = function(args)
 	if not args isa list then return args
 	s = args[0]
