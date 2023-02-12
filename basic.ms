@@ -408,6 +408,12 @@ Evaluator.doCallOrArray = function(call)
 	args = call[1:]
 	f = machine.fn.get(funcOrArrayName)
 	array = machine.arrs.get(funcOrArrayName)
+	if f == null and array == null then
+		// old-BASIC quirk: even arrays exist automatically, as soon as they are
+		// referenced, with 1 dimension and a size of 10.
+		if isNumericId(funcOrArrayName) then array = [0]*10 else array = [""]*10
+		machine.arrs[funcOrArrayName] = array
+	end if
 	if @f then
 		// it's a function — invoke it!
  		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
@@ -781,14 +787,28 @@ Machine.nextDataIdx = 0		// which element of self.data to READ next
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 
+
+Machine.reset = function
+	self.program = {}
+	self.lineNums = []
+	self.lineIdx = 0
+	self.vars = {}
+	self.arrs = {}
+	self.forLoops = []
+	self.nextDataIdx = 0
+	self.plotPos = [0,0]
+end function
+
 // Assign a value to the given lvar.  Returns true on success,
 // false if failed.
 Machine.assignLvar = function(lvar, value)
 	if isNumericId(lvar.id) then value = val(value)
 	if lvar.isArrayElem then
 		if not self.arrs.hasIndex(lvar.id) then
-			printErr "invalid array name " + lvar.id
-			return false
+			// old-BASIC quirk: even arrays exist automatically, as soon as they are
+			// referenced, with 1 dimension and a size of 10.
+			if isNumericId(lvar.id) then arr = [0]*10 else arr = [""]*10
+			self.arrs[lvar.id] = arr
 		end if
 		arr = self.arrs[lvar.id]
 		index = lvar.index
@@ -942,11 +962,11 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 		pos += 1
 		if isOpenParen(name) then
 			name = name[:-1]
-			if pos+2 >= endIdx then return printErr("incomplete DIM statement 1")
+			if pos+1 >= endIdx then return printErr("incomplete DIM statement")
 			dims = []
 			while pos+1 < endIdx
 				nextPos = tokens.indexOfAnyParenSavvy([",", ")"], pos, endIdx)
-				if nextPos == null then return printErr("incomplete DIM statement 2")
+				if nextPos == null then return printErr("incomplete DIM statement")
 				maxIndex = Evaluator.make(tokens, pos, nextPos).evaluate
 				if not maxIndex isa number then return printErr("DIM size must be a number")
 				dims.push maxIndex
@@ -1430,16 +1450,6 @@ Machine.goTo = function(lineNum)
 	if self.nextLineIdx == null then
 		printErr "Invalid line number: " + lineNum
 	end if
-end function
-
-Machine.reset = function
-	self.program = {}
-	self.lineNums = []
-	self.lineIdx = 0
-	self.vars = {}
-	self.arrs = {}
-	self.forLoops = []
-	self.plotPos = [0,0]
 end function
 
 machine = new Machine
