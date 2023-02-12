@@ -277,197 +277,222 @@ tokenize = function(line)
 end function
 
 //======================================================================
-// Expression evaluation
+// Expression evaluator
 //======================================================================
 
-// evalTokens: evaluate a tokenized expression.
-//  For example, given [6, "*", 7], return 42.
-evalTokens = function(tokens, customLocals)
+Evaluator = {}
+Evaluator.tokens = []
+Evaluator.nextTokIdx = 0
+Evaluator.endIdx = 0
+Evaluator.stack = null
 
-	debugPrint = function(s)
-		//text.color = "#008800"; print s; text.color = gfx.color
-	end function
+Evaluator.make = function(tokens, startIdx=0, endIdx=null)
+	eval = new Evaluator
+	eval.tokens = tokens
+	eval.startIdx = startIdx
+	if endIdx == null then eval.endIdx = tokens.len else eval.endIdx = endIdx
+	eval.stack = []
+	return eval
+end function
 
-	debugPrint "evalTokens(" + tokens + ")"
-	stack = []
-	
-	doBinop = function
-		opB = stack.pop
-		op = stack.pop
-		opA = stack.pop		
-		if op == "+" then
-			stack.push opA + opB
-		else if op == "-" then
-			stack.push opA - opB
-		else if op == "*" then
-			stack.push opA * opB
-		else if op == "/" then
-			stack.push opA / opB
-		else if op == "\" then
-			stack.push int(int(opA) / int(opB))
-		else if op == "MOD" then
-			stack.push opA % opB
-		else if op == "^" then
-			stack.push opA ^ opB
-		else if op == "=" then
-			stack.push opA == opB
-		else if op == "<>" then
-			stack.push opA != opB
-		else if op == "<" then
-			stack.push opA < opB
-		else if op == ">" then
-			stack.push opA > opB
-		else if op == "<=" then
-			stack.push opA <= opB
-		else if op == ">=" then
-			stack.push opA >= opB	
-		else if op == "EQV" then
-			stack.push (opA != 0) == (opB != 0)	
-		else if op == "IMP" then
-			stack.push (opA == 0) or (opA != 0 and opB != 0)	
-		else if op == "XOR" then
-			stack.push (opA == 0) != (opB == 0)
-		else if op == "OR" then
-			stack.push (opA != 0) or (opB != 0)
-		else if op == "AND" then
-			stack.push (opA != 0) and (opB != 0)
+Evaluator.debugPrint = function(s)
+	//text.color = "#008800"; print s; text.color = gfx.color
+end function
+
+Evaluator.doBinop = function
+	opB = self.stack.pop
+	op = self.stack.pop
+	opA = self.stack.pop		
+	if op == "+" then
+		self.stack.push opA + opB
+	else if op == "-" then
+		self.stack.push opA - opB
+	else if op == "*" then
+		self.stack.push opA * opB
+	else if op == "/" then
+		self.stack.push opA / opB
+	else if op == "\" then
+		self.stack.push int(int(opA) / int(opB))
+	else if op == "MOD" then
+		self.stack.push opA % opB
+	else if op == "^" then
+		self.stack.push opA ^ opB
+	else if op == "=" then
+		self.stack.push opA == opB
+	else if op == "<>" then
+		self.stack.push opA != opB
+	else if op == "<" then
+		self.stack.push opA < opB
+	else if op == ">" then
+		self.stack.push opA > opB
+	else if op == "<=" then
+		self.stack.push opA <= opB
+	else if op == ">=" then
+		self.stack.push opA >= opB	
+	else if op == "EQV" then
+		self.stack.push (opA != 0) == (opB != 0)	
+	else if op == "IMP" then
+		self.stack.push (opA == 0) or (opA != 0 and opB != 0)	
+	else if op == "XOR" then
+		self.stack.push (opA == 0) != (opB == 0)
+	else if op == "OR" then
+		self.stack.push (opA != 0) or (opB != 0)
+	else if op == "AND" then
+		self.stack.push (opA != 0) and (opB != 0)
+	else
+		return printErr("Unknown operator: " + op)
+	end if
+	self.debugPrint "Applied " + op + " to " + opA + " and " + opB + " to get " + self.stack[-1]
+end function
+
+Evaluator.doUnaryOp = function
+	opA = self.stack.pop
+	op = self.stack.pop
+	if op == "-" then
+		self.stack.push -opA
+	else if op == "NOT" then
+		self.stack.push not (opA != 0)
+	end if
+	self.debugPrint "Applied " + op + " to " + opA + " to get " + self.stack[-1]
+end function
+
+
+// Find the function call (or array lookup) in the stack; it will
+// be the thing closest to the top that looks like "ABC(".  Return
+// that, along with its arguments (stuff on stack above that),
+// pulling all of these off the stack.  If no such thing is found
+// (before we get to an operator or start of stack), return null.
+Evaluator.pullCall = function
+	pos = self.stack.len - 1
+	while pos >= 0
+		if isOpenParen(self.stack[pos]) then
+			// found it!  Grab the function and arguments, with commas...
+			result = self.stack[pos:]
+			// strip out the commas...
+			for i in range(result.len-1, 1)
+				if result[i] == "," then result.remove i
+			end for
+			// clear all that stuff off stack
+			while self.stack.len > pos; self.stack.pop; end while
+			// and we're done
+			return result
+		end if
+		pos -= 1
+	end while
+	return null
+end function
+
+// Collapse any binary and unary operators on the top of 
+// the stack.  This should proceed until we hit either the
+// bottom of the stack, or an open paren, or a comma.
+Evaluator.collapseStack = function
+	self.debugPrint "Collapsing self.stack: " + self.stack
+	while self.stack.len > 1
+		if self.stack[-2] == "," then return
+		if isOpenParen(self.stack[-2]) then return
+		if self.stack[-2] == "NOT" or (self.stack.len > 2 and isOpenParen(self.stack[-3])) then
+			self.doUnaryOp
+		else if self.stack.len > 2 then
+			self.doBinop
 		else
-			return printErr("Unknown operator: " + op)
+			break
 		end if
-		debugPrint "Applied " + op + " to " + opA + " and " + opB + " to get " + stack[-1]
-	end function
-	
-	doUnaryOp = function
-		opA = stack.pop
-		op = stack.pop
-		if op == "-" then
-			stack.push -opA
-		else if op == "NOT" then
-			stack.push not (opA != 0)
-		end if
-		debugPrint "Applied " + op + " to " + opA + " to get " + stack[-1]
-	end function
-	
-	// Find the function call (or array lookup) in the stack; it will
-	// be the thing closest to the top that looks like "ABC(".  Return
-	// that, along with its arguments (stuff on the stack above that),
-	// pulling all of these off the stack.  If no such thing is found
-	// (before we get to an operator or start of stack), return null.
-	pullCall = function
-		pos = stack.len - 1
-		while pos >= 0
-			if isOpenParen(stack[pos]) then
-				// found it!  Grab the function and arguments, with commas...
-				result = stack[pos:]
-				// strip out the commas...
-				for i in range(result.len-1, 1)
-					if result[i] == "," then result.remove i
-				end for
-				// clear all that stuff off the stack
-				while stack.len > pos; stack.pop; end while
-				// and we're done
-				return result
-			end if
-			pos -= 1
-		end while
-		return null
-	end function
+	end while
+	self.debugPrint "...collapsed to:  " + self.stack
+end function
 
-	// Collapse any binary and unary operators on the top of 
-	// the stack.  This should proceed until we hit either the
-	// bottom of the stack, or an open paren, or a comma.
-	collapseStack = function
-		debugPrint "Collapsing stack: " + stack
-		while stack.len > 1
-			if stack[-2] == "," then return
-			if isOpenParen(stack[-2]) then return
-			if stack[-2] == "NOT" or (stack.len > 2 and isOpenParen(stack[-3])) then
-				doUnaryOp
-			else if stack.len > 2 then
-				doBinop
-			else
-				break
-			end if
-		end while
-		debugPrint "...collapsed to:  " + stack
-	end function
-	
-	pos = 0
-	tokensLen = tokens.len
-	while pos < tokensLen
-		tok = tokens[pos]
-		debugPrint stack + " <-- " + tok
+// evaluate: evaluate a tokenized expression.
+//  For example, given [6, "*", 7], return 42.
+Evaluator.evaluate = function(customLocals=null)
+	self.debugPrint "evalTokens(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
+	self.stack = []
+	canBail = false	// marks points where we can bail out if we start a new value
+
+	pos = self.nextTokIdx
+	while pos < self.endIdx
+		tok = self.tokens[pos]
+		self.debugPrint self.stack + " <-- " + tok
 		if tok isa string and tok.endsWith("(") then
-			stack.push tok
+			if canBail then break
+			self.stack.push tok
+			canBail = false
 		else if tok == "," then
 			// we've gotten a comma, which is a top-level grouper;
-			// go ahead and collapse anything on the stack back to 
+			// go ahead and collapse anything on stack back to 
 			// the previous comma or open-paren
-			collapseStack
-			stack.push tok
+			self.collapseStack
+			self.stack.push tok
+			canBail = false
 		else if tok == ")" then
-			// collapse last argument, i.e. collapse stack back to opening "(" or ","
-			collapseStack
+			// collapse last argument, i.e. collapse self.stack back to opening "(" or ","
+			self.collapseStack
 			// Now, there are two cases.  Either this is a plain parenthesized
 			// sub-expression, or it is a function/array call.
 			// If it's a sub-expression, then the open paren must be the next-
-			// to-last item in the stack.
-			if stack[stack.len-2] == "(" then
-				debugPrint "Ordinary parenthesized sub-expression found"
+			// to-last item in stack.
+			if self.stack[self.stack.len-2] == "(" then
+				self.debugPrint "Ordinary parenthesized sub-expression found"
 				// ...in this case, we just remove the open paren and we're done
-				stack.remove stack.len-2
+				self.stack.remove self.stack.len-2
 			else
 				// otherwise, it should be a call
-				call = pullCall
+				call = self.pullCall
 				if call then
-					debugPrint "Evaluating a call: " + call
+					self.debugPrint "Evaluating a call: " + call
 					funcOrArrayName = call[0][:-1]
 					args = call[1:]; if args.len == 1 then args = args[0]
 					f = machine.fn.get(funcOrArrayName)
 					array = machine.arrs.get(funcOrArrayName)
 					if @f then
-						stack.push f(args)
+						self.stack.push f(args)
 					else if array != null then
 						idx = args
 						if not idx isa number then return printErr("array index must be numeric")
 						if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
-						stack.push array[idx]
+						self.stack.push array[idx]
 					else
 						return printErr("unknown function or array " + funcOrArrayName)
 					end if
-				else if stack.len < 3 then
+				else if self.stack.len < 3 then
 					return printErr("unmatched parentheses")
 				end if
 			end if
+			canBail = true
 		else if tok isa number then
 			// push a numeric operand
-			stack.push tok
-			if stack.len > 1 and stack[-2] == "-" and
-					(stack.len == 2 or (stack[-3] isa string and 
-					stack[-3].endsWith("("))) then
-				doUnaryOp
+			if canBail then break
+			self.stack.push tok
+			if self.stack.len > 1 and self.stack[-2] == "-" and
+					(self.stack.len == 2 or (self.stack[-3] isa string and 
+					self.stack[-3].endsWith("("))) then
+				self.doUnaryOp
 			end if
+			canBail = true
 		else if tok[0] == """" then
 			// push a string literal
-			stack.push stripQuotes(tok)
+			if canBail then break
+			self.stack.push stripQuotes(tok)
+			canBail = true
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
-			if stack and not isOpenParen(stack[-1]) then
-				while stack.len >= 3
-					// process any higher-precedence operators already on the stack
+			if self.stack and not isOpenParen(self.stack[-1]) then
+				while self.stack.len >= 3
+					// process any higher-precedence operators already on stack
 					prevOpIdx = -1
-					if stack.len > 1 then prevOpIdx = operators.indexOf(stack[-2])
-					debugPrint "at op " + opIdx + ", considering " + prevOpIdx
+					if self.stack.len > 1 then prevOpIdx = operators.indexOf(self.stack[-2])
+					self.debugPrint "at op " + opIdx + ", considering " + prevOpIdx
 					if opIdx > prevOpIdx then break
-					doBinop
+					self.doBinop
 				end while
 			end if
 			// then push the new operator
-			stack.push tok
+			self.stack.push tok
+			canBail = false
 			//print "Pushed operator: " + tok
 		else
 			// push the value of identifier
+			if canBail then break
 			if customLocals != null and customLocals.hasIndex(tok) then
 				value = customLocals[tok]
 			else if not machine.vars.hasIndex(tok) then
@@ -476,22 +501,29 @@ evalTokens = function(tokens, customLocals)
 			else
 				value = machine.vars[tok]
 			end if
-			stack.push value
-			if stack.len > 1 and stack[-2] == "-" and
-					(stack.len == 2 or (stack[-3] isa string and 
-					stack[-3].endsWith("("))) then
-				doUnaryOp
+			self.stack.push value
+			if self.stack.len > 1 and self.stack[-2] == "-" and
+					(self.stack.len == 2 or (self.stack[-3] isa string and 
+					self.stack[-3].endsWith("("))) then
+				self.doUnaryOp
 			end if
+			canBail = true
 		end if
-		debugPrint "After handling " + tokens[pos] + ", stack is now: " + stack
+		self.debugPrint "After handling " + self.tokens[pos] + ", self.stack is now: " + self.stack
 		pos += 1
+		self.nextTokIdx = pos
 	end while
-	// finally, collapse the stack (which should be in precedence order)
-	collapseStack
-	if stack.len > 1 then
-		printErr "Syntax error -- extra stuff on stack: " + stack
+	// finally, collapse stack (which should be in precedence order)
+	self.collapseStack
+	if self.stack.len > 1 then
+		printErr "Syntax error -- extra stuff on self.stack: " + self.stack
 	end if
-	return stack[0]
+	return self.stack[0]
+end function
+
+evalTokens = function(tokens, customLocals=null)
+	eval = Evaluator.make(tokens)
+	return eval.evaluate(customLocals)
 end function
 
 //======================================================================
@@ -1133,17 +1165,23 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 //	print "Printing " + tokens + " " + startIdx+":"+endIdx
 	pos = startIdx + 1
 	needEOL = true
-	while pos < endIdx
-		// ToDo: grab complete expressions even if they aren't separated
+	eval = Evaluator.make(tokens, startIdx, endIdx)
+	while eval.nextTokIdx < endIdx
+		// Grab complete expressions even if they aren't separated
 		// by any delimiters.  This is weird, but something old BASICS did,
-		// and you can find old BASIC programs that actually use this.  :(
+		// and you can find old BASIC programs that actually use this.  :(		
 		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
+		if pos == endPos then break			
 //		print "Now to print: " + tokens[pos:endPos]
-		value = evalTokens(tokens[pos:endPos])
+		eval.nextTokIdx = pos
+		eval.endIdx = endPos
+		value = eval.evaluate
 //		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
 		print value, ""
-		if endPos < endIdx then
-			if tokens[endPos] == "," then print " ", ""
+		if eval.nextTokIdx < endIdx then
+			nextTok = tokens[eval.nextTokIdx]
+			if nextTok == "," then print " ", ""
+			if nextTok == "," or nextTok == ";" then eval.nextTokIdx += 1
 			needEOL = false
 		else if tokens[pos] == "TAB(" then
 			// weird quirk of old BASIC: the TAB function acts like a semicolon
@@ -1151,7 +1189,7 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		else
 			needEOL = true
 		end if
-		pos = endPos + 1
+		pos = eval.nextTokIdx
 	end while
 	if needEOL then print
 end function
@@ -1395,6 +1433,14 @@ runUnitTests = function
 	assertEqual getRange([10, "-"]), {"from":10, "to":null}
 	assertEqual getRange([10]), {"from":10, "to":10}
 	assertEqual getRange([-20]), {"from":null, "to":20}
+	
+	e = Evaluator.make(["""foo""", 42, "+", 3, """bar"""])
+	assertEqual e.evaluate, "foo"
+	assertEqual e.nextTokIdx, 1
+	assertEqual e.evaluate, 45
+	assertEqual e.nextTokIdx, 4
+	assertEqual e.evaluate, "bar"
+	assertEqual e.nextTokIdx, 5
 	
 	if errorCount then exit
 end function

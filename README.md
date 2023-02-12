@@ -13,6 +13,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 - expression parsing including all standard operators
 - support for multiple statements on one line, separated by `:`
 - one-dimensional arrays
+- weird PRINT syntax that lets you just list expressions with no delimiters between them
 - program management:
   - `NEW`
   - `LIST` (note: not yet with range of line numbers)
@@ -44,6 +45,8 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `PLOT` _x_, _y_, (plot a single pixel, and set the plot position)
   - `LINE` _x_, _y_, (draw a line from the last plot/line position)
   - `UPPER$`, `LOWER$` (or similar)
+  - `DEF FN`
+  - `SOUND` command, and more drawing commands
   
 ## Features Still To Come ##
 
@@ -53,14 +56,10 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `RENUMBER`
 - support for multidimensional arrays
 - distinction between string and numeric variables
-- weird PRINT syntax that lets you just list expressions with no delimiters between them
-- SOUND command, and more drawing commands
-- standard BASIC commands:
-  - `DEF FN`
 
 ## Sample Programs
 
-Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Most of these don't work yet, though a few of them (like "chemist") do.
+Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  Some of these still don't work yet (mostly because of multidimensional arrays), but most of them do.
 
 I'm also starting a second collection of programs written specifically for MiniBASIC, or adapted from other sources.  The programs/text subdirectory contains the first of these.
 
