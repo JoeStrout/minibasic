@@ -11,7 +11,7 @@ import "mathUtil"
 
 // Keywords, including all BASIC commands (but not including functions,
 // which are defined as part of the Machine class):
-keywords = "PRINT INPUT GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
+keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
   "CLS HOME HTAB VTAB COLOR LINE PLOT".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
@@ -786,7 +786,7 @@ Machine.data = []			// collected data from DATA statements
 Machine.nextDataIdx = 0		// which element of self.data to READ next
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
-
+Machine.trace = false		// if on, print line numbers as we execute them
 
 Machine.reset = function
 	self.program = {}
@@ -1038,8 +1038,7 @@ Machine.cmd.GOTO = function(tokens, startIdx, endIdx)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOTO")
 	end if
-	machine.goTo tokens[startIdx+1]
-	return 0
+	return machine.goTo(tokens[startIdx+1])
 end function
 
 Machine.cmd.HOME = function(tokens, startIdx, endIdx)
@@ -1219,6 +1218,29 @@ Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
 	end if	
 end function
 
+Machine.cmd.ON = function(tokens, startIdx, endIdx)
+	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx+1, endIdx, endIdx)
+	if goPos == endIdx then return printErr("Incomplete ON statement")
+	eval = Evaluator.make(tokens, startIdx+1, goPos)
+	targetIndex = floor(eval.evaluate) - 1
+	targets = []		// line numbers we could jump to (0-based list)
+	pos = goPos + 1
+	while pos < endIdx
+		targetLineNum = tokens[pos]
+		if not targetLineNum isa number then return printErr("Line numbers must be numeric")
+		targets.push targetLineNum
+		if pos+1 < endIdx and tokens[pos+1] != "," then return printErr("Syntax error in ON statement")
+		pos += 2
+	end while
+	if targetIndex < 0 or targetIndex >= targets.len then return
+	if tokens[goPos] == "GOSUB" then
+		returnTo = new ReturnStackEntry
+		returnTo.lineIdx = machine.lineIdx + 1	
+		machine.returnStack.push returnTo
+	end if
+	return machine.goTo(targets[targetIndex])
+end function
+
 Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
 	// ToDo: when we have functions that take multiple arguments (and
 	// so involve commas), we will need to change how this works.  We
@@ -1364,7 +1386,9 @@ Machine.doImmediate = function(tokens)
 end function
 
 Machine.runOneLine = function
-	tokens = self.program[self.lineNums[self.lineIdx]]
+	lineNum = self.lineNums[self.lineIdx]
+	if self.trace then print "#" + lineNum + " ", ""
+	tokens = self.program[lineNum]
 	if self.tokenIdx == null then self.tokenIdx = 0
 	self.nextLineIdx = null
 	while self.tokenIdx < tokens.len
@@ -1374,7 +1398,7 @@ Machine.runOneLine = function
 		if self.nextLineIdx != null then break
 	end while
 
-	if not self.nextLineIdx then
+	if self.nextLineIdx == null then
 		self.lineIdx += 1
 		self.tokenIdx = 0
 		if self.lineIdx >= self.lineNums.len then return
@@ -1450,6 +1474,7 @@ Machine.goTo = function(lineNum)
 	if self.nextLineIdx == null then
 		printErr "Invalid line number: " + lineNum
 	end if
+	return 0
 end function
 
 machine = new Machine
@@ -1518,19 +1543,16 @@ machine.reset
 machine.cmd.HOME
 runUnitTests
 
-print "MiniBasic 0.04"
+print "MiniBasic 0.05"
 
 // HACK For testing
-repl "10 gosub 100: if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"": GOTO 30"
-repl "20 ? ""math is broken"""
-repl "25 end"
-repl "30 ? ""math works!"""
-repl "40 gosub 100"
-repl "5 REM This is just a little test program."
-repl "8 print ""Ready..."";: ?""Set..."""
-repl "50 A$ = ""Hello world!"""
-repl "60 print LEFT$(A$, 5) + RIGHT$(A$, 1)"
-repl "70 if SIN(1.5) < 0 THEN 20"
+repl "10 gosub 100: if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"""
+repl "15 I = INT(RND(0)*5)"
+repl "20 ? ""I is "";I: ON I GOTO 50, 60,70"
+repl "30 ? ""That's not in the range 1-3, apparently."": END"
+repl "50 ? ""one"": GOTO 80"
+repl "60 ? ""two"": GOTO 80"
+repl "70 ? ""three"": GOTO 80"
 repl "80 END"
 repl "100 REM Test Subroutine"
 repl "110 print: print ""====="": print"
