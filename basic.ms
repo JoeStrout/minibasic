@@ -1416,6 +1416,7 @@ Machine.runProgram = function
 	self.halt = false
 	self.lineIdx = 0
 	self.tokenIdx = 0
+	self.nextDataIdx = 0
 	self.inThen = false
 	while not self.halt and self.lineIdx < self.lineNums.len
 		self.runOneLine

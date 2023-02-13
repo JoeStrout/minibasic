@@ -1,0 +1,23 @@
+5 REM Program to draw a character chart
+6 REM for the first 255 code points.
+10 CLS
+20 GOSUB 200
+30 GOSUB 100
+90 PRINT TAB(1, 26): END
+
+100 REM Draw Text Chart
+120 FOR C = 0 TO 255
+130 COL = INT(C/24): ROW = C MOD 24 + 2
+140 PRINT TAB(1+COL*6, ROW); CHR$(C)
+150 PRINT TAB(1+COL*6+2, ROW); C
+160 NEXT
+170 RETURN
+
+200 REM Draw Divider Lines
+210 FOR COL = 1 TO 10
+220 X = COL * (14*6) - 4
+230 PLOT X, 36: LINE X, 612
+240 NEXT
+250 RETURN
+
+
