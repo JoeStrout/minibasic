@@ -288,7 +288,7 @@ tokenize = function(line)
 			if i+1 >= tokens.len then continue
 			tokj = tokens[i+1]
 			if tokens[i+1] == "(" and isIdentifier(toki) then
-				tokens[i] = toki.upper + "("
+				tokens[i] = toki + "("
 				tokens.remove i+1
 			else if (toki == ">" or toki == "<") and "<>=".contains(tokj) then
 				tokens[i] = toki + tokj
@@ -636,7 +636,7 @@ listOneLine = function(lineNum, tokens)
 			text.color = syntaxColor.rem
 			print space + tok, " "
 			text.color = syntaxColor.comment
-			print tokens[-1], ""
+			if tokens.len > 1 then print tokens[-1], ""
 			break
 		else if keywords.contains(tok) then
 			text.color = syntaxColor.keyword
@@ -1423,8 +1423,6 @@ Machine.cmd.SOUND = function(tokens, startIdx, endIdx)
 		wave = options[waveform]
 	end if
 	
-	print "Frequency: " + frequency
-
 	snd = new Sound
 	snd.init duration, frequency, volume, wave
 	snd.play
