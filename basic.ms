@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT".split +
+  "CLS HOME HTAB VTAB COLOR LINE PLOT GET WAIT".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
@@ -132,7 +132,7 @@ list.indexOfAnyParenSavvy = function(options, afterIdx=-1, endIndex=null, defaul
 end function
 
 isIdentifier = function(s)
-	if s isa number or not s then return false
+	if not s isa string or not s then return false
 	if keywords.contains(s) then return false
 	return isIdentifierChar(s[0])
 end function
@@ -272,18 +272,26 @@ tokenize = function(line)
 		// except an identifier, number, or right paren.  In that case, combine it
 		// with the number (making it negative).  Also combine "FN" with the following
 		// identifier (these are user-defined functions).  Also, combine '(' with a 
-		// previous identifier (this is a function call).
+		// previous identifier (this is a function call), and look for two-operator
+		// combos (like "<" ">") which should be combined ("<>").
 		for i in range(tokens.len-2, 0)
-			if tokens[i] == "-" and tokens[i+1] isa number and
+			toki = tokens[i]
+			tokj = tokens[i+1]
+			if toki == "-" and tokj isa number and
 			  not (i > 0 and (tokens[i-1] isa number or tokens[i-1]==")" or isIdentifier(tokens[i-1]))) then
 				tokens[i+1] = -tokens[i+1]
 				tokens.remove i
-			else if tokens[i] == "FN" and tokens[i+1] isa string then
-				tokens[i] = tokens[i] + " " + tokens[i+1]
+			else if toki == "FN" and tokj isa string then
+				tokens[i] = toki + " " + tokj
 				tokens.remove i+1
 			end if
-			if i+1 < tokens.len and tokens[i+1] == "(" and isIdentifier(tokens[i]) then
-				tokens[i] = tokens[i].upper + "("
+			if i+1 >= tokens.len then continue
+			tokj = tokens[i+1]
+			if tokens[i+1] == "(" and isIdentifier(toki) then
+				tokens[i] = toki.upper + "("
+				tokens.remove i+1
+			else if (toki == ">" or toki == "<") and "<>=".contains(tokj) then
+				tokens[i] = toki + tokj
 				tokens.remove i+1
 			end if
 		end for
@@ -788,15 +796,19 @@ Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 Machine.trace = false		// if on, print line numbers as we execute them
 
-Machine.reset = function
-	self.program = {}
-	self.lineNums = []
-	self.lineIdx = 0
+Machine.resetData = function
 	self.vars = {}
 	self.arrs = {}
 	self.forLoops = []
 	self.nextDataIdx = 0
 	self.plotPos = [0,0]
+end function
+
+Machine.reset = function
+	self.program = {}
+	self.lineNums = []
+	self.lineIdx = 0
+	self.resetData
 end function
 
 // Assign a value to the given lvar.  Returns true on success,
@@ -850,7 +862,7 @@ Machine.fn["CHR$"] = function(n); return char(n); end function
 Machine.fn.COS = function(n); return cos(n); end function
 Machine.fn.EXP = function(n); return mathUtil.e ^ n; end function
 Machine.fn.FIX = function(n); return int(n); end function
-Machine.fn["INKEY$"] = function(z); return key.get; end function
+Machine.fn["INKEY$"] = function(z); if key.available then return key.get else return ""; end function
 Machine.fn.INT = function(n); return floor(n); end function
 Machine.fn["LEFT$"] = function(args)
 	if not args isa list then return args
@@ -996,8 +1008,8 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
 		return printErr("incomplete FOR statement")
 	end if
-	var = tokens[1]
-	if not isIdentifier(var) then return printErr("invalid FOR loop variable")
+	var = tokens[startIdx + 1]
+	if not isIdentifier(var) then return printErr("invalid FOR loop variable " + var)
 	toPos = tokens.indexOf("TO", startIdx+3)
 	if toPos == null or toPos >= endIdx then return printErr("incomplete FOR statement")
 	stepPos = tokens.indexOf("STEP", startIdx+4)
@@ -1017,6 +1029,14 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 		lineIdx = machine.lineIdx + 1; tokenIdx = 0
 	end if
 	machine.forLoops.push ForLoopState.make(var, toVal, step, lineIdx, tokenIdx)
+end function
+
+Machine.cmd.GET = function(tokens, startIdx, endIdx)
+	lvar = Lvar.make(tokens, startIdx + 1, endIdx)
+	if lvar == null then return printErr("incomplete GET statement")
+	k = key.get
+	if isNumericId(lvar.id) then k = k.code
+	machine.assignLvar lvar, k
 end function
 
 Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
@@ -1332,6 +1352,12 @@ Machine.cmd.VTAB = function(tokens, startIdx, endIdx)
 	text.row = 26 - row
 end function
 
+Machine.cmd.WAIT = function(tokens, startIdx, endIdx)
+	duration = 1
+	if startIdx + 1 < endIdx then duration = val(tokens[startIdx+1])
+	wait duration
+end function
+
 
 // Run one statement within the given set of tokens,
 // returning the token that starts the NEXT statement
@@ -1411,13 +1437,13 @@ Machine.runOneLine = function
 end function
 
 Machine.runProgram = function
+	self.resetData
 	self.sortLines
 	self.findData
 	self.halt = false
+	self.inThen = false
 	self.lineIdx = 0
 	self.tokenIdx = 0
-	self.nextDataIdx = 0
-	self.inThen = false
 	while not self.halt and self.lineIdx < self.lineNums.len
 		self.runOneLine
 	end while

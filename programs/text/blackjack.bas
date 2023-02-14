@@ -1,23 +1,25 @@
 10  REM   BLACKJACK
 20  DIM CU(13,4),CL$(4),CD$(13)
 100  HOME : PRINT 
-110  PRINT  TAB 16)"BLACKJACK": PRINT : PRINT  TAB 14)"By Joe Strout"
+110  PRINT  TAB(16)"BLACKJACK": PRINT : PRINT  TAB(14)"By Joe Strout"
 120  PRINT : PRINT : PRINT 
 140 CL$(1) = "H":CL$(2) = "S":CL$(3) = "D":CL$(4) = "C"
 150  FOR I = 2 TO 10:CD$(I) =  STR$ (I): NEXT :CD$(11) = "J":CD$(12) = "Q":CD$(13) = "K":CD$(1) = "A"
 190 MN = 40: REM  MONEY LEFT
-200  PRINT : PRINT : PRINT "   You have $"MN"."
-210  PRINT : PRINT "Press [P] to play,": PRINT "   or [Q] to quit: ";
-220  GET A$: IF A$ = "p" OR A$ = "P" THEN 300
-230  IF A$ <  > "q" AND A$ <  > "Q" THEN 220
-240  END : REM  Run menu file here
+200  PRINT : PRINT : PRINT "   You have $"MN".": PRINT
+210  IF MN < 1 THEN PRINT "You are out of money.  Better luck next time!": END
+250  PRINT "Press [P] to play,": PRINT "   or [Q] to quit: ";
+260  GET A$: IF A$ = "p" OR A$ = "P" THEN 300
+270  IF A$ <  > "q" AND A$ <  > "Q" THEN 260
+280  PRINT : END
 300  REM   PLAY
 310  HOME : PRINT : PRINT "You have $"MN".": PRINT 
-320  INPUT "How much will you bet? ";BT
+320  INPUT "How much will you bet? ", BT
+325  IF BT = 0 THEN 200
 330  IF BT > MN OR BT < 1 THEN 300
 340  IF BT = 0 THEN 200
 350 MN = MN - BT
-360  PRINT "Shuffling...": FOR A = 1 TO 13: FOR B = 1 TO 4:CU(A,C) = 0: NEXT : NEXT 
+360  PRINT "Shuffling...": FOR A = 1 TO 13: FOR B = 1 TO 4:CU(A,B) = 0: NEXT : NEXT 
 400  REM  DEAL
 410  GOSUB 2000:DV(1) = V:DC(1) = C
 420  GOSUB 2000:DV(2) = V:DC(2) = C
@@ -25,7 +27,7 @@
 440  GOSUB 2000:PV(2) = V:PC(2) = C
 450 NP = 2:ND = 2
 480  GOSUB 1500
-500  REM 
+500  REM Player choice: Hit or Stand?
 510 HD = 1: GOSUB 2100: GOSUB 2200: IF A > 21 THEN 600
 520  PRINT : PRINT "[H]it, or [S]tand? ";
 530  GET A$: IF A$ = "S" OR A$ = "s" THEN  PRINT "Stand": GOTO 1000
@@ -36,8 +38,8 @@
 610  PRINT : PRINT "You're busted.": PRINT : PRINT 
 620  GOTO 200
 1000  REM   Dealer's Turn
-1010  PRINT : PRINT "Now it's my turn...": FOR J = 1 TO 200: NEXT 
-1020  REM 
+1010  PRINT : PRINT "Now it's my turn...": WAIT 1.5
+1020  REM Dealer draws
 1030 HD = 0: GOSUB 2100: GOSUB 2300
 1040  IF A < 17 THEN  GOSUB 2000:ND = ND + 1:DV(ND) = V:DC(ND) = C: GOTO 1020
 1050  IF A > 21 THEN 1200
