@@ -1,4 +1,6 @@
 10  REM   BLACKJACK
+11  REM  Originally written circa 1985
+12  REM  Updated for MiniBASIC in 2003
 20  DIM CU(13,4),CL$(4),CD$(13)
 100  HOME : PRINT 
 110  PRINT  TAB(16)"BLACKJACK": PRINT : PRINT  TAB(14)"By Joe Strout"
