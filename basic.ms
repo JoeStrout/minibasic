@@ -416,7 +416,7 @@ Evaluator.doCallOrArray = function(call)
 	args = call[1:]
 	f = machine.fn.get(funcOrArrayName)
 	array = machine.arrs.get(funcOrArrayName)
-	if f == null and array == null then
+	if @f == null and array == null then
 		// old-BASIC quirk: even arrays exist automatically, as soon as they are
 		// referenced, with 1 dimension and a size of 10.
 		if isNumericId(funcOrArrayName) then array = [0]*10 else array = [""]*10
@@ -862,7 +862,7 @@ Machine.fn["CHR$"] = function(n); return char(n); end function
 Machine.fn.COS = function(n); return cos(n); end function
 Machine.fn.EXP = function(n); return mathUtil.e ^ n; end function
 Machine.fn.FIX = function(n); return int(n); end function
-Machine.fn["INKEY$"] = function(z); if key.available then return key.get else return ""; end function
+Machine.fn["INKEY$"] = function(z);	if key.available then return key.get; return ""; end function
 Machine.fn.INT = function(n); return floor(n); end function
 Machine.fn["LEFT$"] = function(args)
 	if not args isa list then return args
@@ -870,8 +870,9 @@ Machine.fn["LEFT$"] = function(args)
 	if args.len > 1 then length = args[1] else length = s.len
 	return s[:length]
 end function
-Machine.fn.LEN = function(s); return s.len; end function
+Machine.fn.LEN = function(s); return len(s); end function
 Machine.fn.LOG = function(n); return mathUtil.ln(n); end function
+Machine.fn["LOWER$"] = function(s); return lower(s); end function
 Machine.fn["MID$"] = function(args)
 	if not args isa list then return args
 	s = args[0]
@@ -910,6 +911,7 @@ Machine.fn.TAB = function(n)
 	return ""
 end function
 Machine.fn.TAN = function(n); return tan(n); end function
+Machine.fn["UPPER$"] = function(s); return upper(s); end function
 Machine.fn.VAL = function(s); return val(s); end function
 
 // Functions skipped for now -- maybe ToDo:
@@ -1063,7 +1065,7 @@ end function
 
 Machine.cmd.HOME = function(tokens, startIdx, endIdx)
 	clear
-	text.row = 26
+	text.row = 26; text.column = 0
 	text.color = palette[5]
 	gfx.color = text.color
 	text.backColor = color.clear
@@ -1073,9 +1075,8 @@ end function
 Machine.cmd.CLS = @Machine.cmd.HOME		// CLS is an alias for HOME
 
 Machine.cmd.HTAB = function(tokens, startIdx, endIdx)
-	col = 0
-	if startIdx + 1 < endIdx then col = val(tokens[startIdx+1])
-	text.column = col - 1
+	eval = Evaluator.make(tokens, startIdx+1, endIdx)
+	text.column = val(eval.evaluate) - 1
 end function
 
 Machine.cmd.IF = function(tokens, startIdx, endIdx)
@@ -1347,14 +1348,15 @@ Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.VTAB = function(tokens, startIdx, endIdx)
-	row = 0
-	if startIdx + 1 < endIdx then row = val(tokens[startIdx+1])
-	text.row = 26 - row
+	eval = Evaluator.make(tokens, startIdx+1, endIdx)
+	text.row = 26 - val(eval.evaluate)
 end function
 
 Machine.cmd.WAIT = function(tokens, startIdx, endIdx)
 	duration = 1
-	if startIdx + 1 < endIdx then duration = val(tokens[startIdx+1])
+	if startIdx+1 < endIdx then
+		duration = val(Evaluator.make(tokens, startIdx+1, endIdx).evaluate)
+	end if
 	wait duration
 end function
 
