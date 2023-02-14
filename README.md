@@ -56,8 +56,8 @@ This is a little project to create an interpreter for the BASIC programming lang
   - `RENAME`
   - `RENUMBER`
 - full typechecking (between string and numeric variables)
-- `REDIM`
-- `ON`...`GOTO`
+- make all identifiers case-insensitive
+- maybe only make undefined variables default to 0 (or a 10-element array) for identifiers 1 or 2 characters long
 
 ## Sample Programs
 
