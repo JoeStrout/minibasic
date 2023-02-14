@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT GET WAIT".split +
+  "CLS HOME HTAB VTAB COLOR LINE PLOT GET WAIT SOUND".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
@@ -307,12 +307,13 @@ Evaluator = {}
 Evaluator.tokens = []
 Evaluator.nextTokIdx = 0
 Evaluator.endIdx = 0
+Evaluator.done = function; return self.nextTokIdx >= self.endIdx; end function
 Evaluator.stack = null
+Evaluator.allowArrayRefs = false	// if true, let user pass entire array, e.g. A()
 
 Evaluator.make = function(tokens, startIdx=0, endIdx=null)
 	eval = new Evaluator
 	eval.tokens = tokens
-	eval.startIdx = startIdx
 	eval.nextTokIdx = startIdx
 	if endIdx == null then eval.endIdx = tokens.len else eval.endIdx = endIdx
 	eval.stack = []
@@ -394,9 +395,11 @@ Evaluator.pullCall = function
 			// found it!  Grab the function and arguments, with commas...
 			result = self.stack[pos:]
 			// strip out the commas...
-			for i in range(result.len-1, 1)
-				if result[i] == "," then result.remove i
-			end for
+			if result.len > 1 then
+				for i in range(result.len-1, 1)
+					if result[i] == "," then result.remove i
+				end for
+			end if
 			// clear all that stuff off stack
 			while self.stack.len > pos; self.stack.pop; end while
 			// and we're done
@@ -435,7 +438,7 @@ Evaluator.doCallOrArray = function(call)
 			if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
 			array = array[idx]
 		end for
-		if array isa list then return printErr("not enough array indexes")
+		if array isa list and not self.allowArrayRefs then return printErr("not enough array indexes")
 		self.stack.push array
 	else
 		return printErr("unknown function or array " + funcOrArrayName)
@@ -567,9 +570,31 @@ Evaluator.evaluate = function(customLocals=null)
 	return self.stack[0]
 end function
 
+// Evaluate the given string of tokens, which should comprise a single expression.
 evalTokens = function(tokens, customLocals=null)
 	eval = Evaluator.make(tokens)
 	return eval.evaluate(customLocals)
+end function
+
+// Evaluate the given string of tokens, assuming that is a comma-separated
+// list of expressions of unknown length.  Stop when we hit the end of the
+// token list, or a ":" (statement separator).  This is commonly used to get
+// the arguments to a BASIC command.  Return argument values as a list.
+getArguments = function(tokens, startIdx, allowArrayRefs =  false)
+	result = []
+	pos = startIdx
+	eval = Evaluator.make(tokens)
+	eval.allowArrayRefs = allowArrayRefs
+	while pos < tokens.len
+		if tokens[pos] == ":" then break
+		argEndPos = tokens.indexOfAnyParenSavvy([":",","], pos-1, tokens.len, tokens.len)
+		eval.nextTokIdx = pos
+		eval.endIdx = argEndPos
+		result.push eval.evaluate
+		if argEndPos == tokens.len or tokens[argEndPos] == ":" then break
+		pos = argEndPos + 1
+	end while
+	return result
 end function
 
 //======================================================================
@@ -967,7 +992,7 @@ Machine.cmd.DEF = function(tokens, startIdx, endIdx)
 	end function
 end function
 
-Machine.cmd.DIM = function(tokens, startIdx, endIdx)
+Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
 	pos = startIdx + 1
 	while pos < endIdx
@@ -990,13 +1015,15 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx)
 			end while
 		end if
 		if not isIdentifier(name) then return printErr("identifier expected in DIM statement")
-		if machine.arrs.hasIndex(name) then return printErr("array " + name + " already DIMensioned")
-
-		if isNumericId(name) then
-			machine.arrs[name] = makeMultiDimArray(dims, 0)
-		else
-			machine.arrs[name] = makeMultiDimArray(dims, "")
+		if machine.arrs.hasIndex(name) then
+			if not redim then return printErr("array " + name + " already DIMensioned")
+			oldArr = machine.arrs[name]
 		end if
+
+		if isNumericId(name) then defaultVal = 0 else defaultVal = ""
+		machine.arrs[name] = makeMultiDimArray(dims, defaultVal)
+		// ToDo: maybe copy old data, as much as possible?
+		
 		if pos < endIdx and tokens[pos] == "," then pos += 1
 	end while
 end function
@@ -1332,6 +1359,10 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 	end while
 end function
 
+Machine.cmd.REDIM = function(tokens, startIdx, endIdx)
+	return machine.cmd.DIM(tokens, startIdx, endIdx, true)
+end function
+
 Machine.cmd.REM = function(tokens, startIdx, endIdx)
 	// no action needed!
 end function
@@ -1345,6 +1376,58 @@ Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
 	returnTo = machine.returnStack.pop
 	machine.nextLineIdx = returnTo.lineIdx
 	return returnTo.tokenIdx
+end function
+
+Machine.cmd.SOUND = function(tokens, startIdx, endIdx)
+	// SOUND arguments (all optional):
+	frequency = 440 // (in Hz, if positive; or -MIDI note numbers, if negative)
+	duration = 0.5	// (in seconds)
+	volume = 1		// volume (0-1)
+	waveform = 1	// 0=sine, 1=triangle, 2=sawtooth, 3=square, 4=noise
+	// Note that frequency and volume can take arrays instead of scalar values.
+	
+	args = getArguments(tokens, startIdx + 1, true)
+	if args.len > 0 then
+		frequency = args[0]
+		if frequency isa list then
+			for i in frequency.indexes
+				frequency[i] = val(frequency[i])
+				if frequency[i] <= 0 then frequency[i] = noteFreq(-frequency[i])
+			end for
+		else
+			frequency = val(frequency)
+			if frequency <= 0 then frequency = noteFreq(-frequency)
+		end if
+	end if
+	if args.len > 1 then
+		duration = val(args[1])
+		if duration isa list then return printErr("SOUND duration must be a number")
+	end if
+	if args.len > 2 then
+		volume = args[2]
+		if volume isa list then
+			for i in volume.indexes; volume[i] = val(volume[i]); end for
+		else
+			volume = val(volume)
+		end if
+	end if
+	if args.len > 3 then waveform = args[3]
+	if waveform isa list then
+		wave = waveform
+	else
+		waveform = val(waveform)
+		options = [Sound.sineWave, Sound.triangleWave, Sound.sawtoothWave, 
+					Sound.squareWave, Sound.noiseWave]
+		if waveform < 0 then waveform = 0
+		if waveform >= options.len then waveform = options.len - 1
+		wave = options[waveform]
+	end if
+	
+	print "Frequency: " + frequency
+
+	snd = new Sound
+	snd.init duration, frequency, volume, wave
+	snd.play
 end function
 
 Machine.cmd.VTAB = function(tokens, startIdx, endIdx)
@@ -1560,6 +1643,11 @@ runUnitTests = function
 	assertEqual e.nextTokIdx, 4
 	assertEqual e.evaluate, "bar"
 	assertEqual e.nextTokIdx, 5
+	
+	args = getArguments(["FOO", 47, "-", 5, ",", """foo"""], 1)
+	assertEqual args, [42, "foo"]
+	args = getArguments(["FOO", 47, "-", 5, ",", """foo""", ":", "REM"], 1)
+	assertEqual args, [42, "foo"]
 	
 	if errorCount then exit
 end function
