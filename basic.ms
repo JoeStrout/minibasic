@@ -580,7 +580,7 @@ end function
 // list of expressions of unknown length.  Stop when we hit the end of the
 // token list, or a ":" (statement separator).  This is commonly used to get
 // the arguments to a BASIC command.  Return argument values as a list.
-getArguments = function(tokens, startIdx, allowArrayRefs =  false)
+getArguments = function(tokens, startIdx, allowArrayRefs = false)
 	result = []
 	pos = startIdx
 	eval = Evaluator.make(tokens)
@@ -1397,7 +1397,29 @@ Machine.cmd.REM = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.RESTORE = function(tokens, startIdx, endIdx)
-	machine.nextDataIdx = 0
+	args = getArguments(tokens, startIdx+1)
+	if not args then
+		machine.nextDataIdx = 0
+	else if args.len > 1 then
+		return printErr("Too many arguments to RESTORE command")
+	else
+		lineNum = val(args[0])
+		if machine.lineNumToDataIdx.hasIndex(lineNum) then
+			machine.nextDataIdx = machine.lineNumToDataIdx[lineNum]
+		else
+			// the specified line number doesn't have any DATA, so search
+			// ahead until we find the next one that does
+			lineIdx = machine.lineNums.indexOf(lineNum)
+			if lineIdx == null then return printErr("Undefined statement in RESTORE")
+			for lineNum in machine.lineNums[lineIdx+1:]
+				if machine.lineNumToDataIdx.hasIndex(lineNum) then
+					machine.nextDataIdx = machine.lineNumToDataIdx[lineNum]
+					return
+				end if
+			end for
+			return printErr("No DATA found at/after line " + args[0])
+		end if
+	end if
 end function
 
 Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
@@ -1571,6 +1593,7 @@ end function
 // that sortLines has already been called).
 Machine.findData = function
 	self.data = []
+	self.lineNumToDataIdx = {}
 	for lineNum in self.lineNums
 		line = self.program[lineNum]
 		pos = 0
@@ -1578,6 +1601,9 @@ Machine.findData = function
 			endPos = line.indexOf(":", pos)
 			if endPos == null then endPos = line.len
 			if line[pos] == "DATA" then
+				if not self.lineNumToDataIdx.hasIndex(lineNum) then
+					self.lineNumToDataIdx[lineNum] = self.data.len
+				end if
 				for p in range(pos+1, endPos-1)
 					if line[p] != "," then self.data.push line[p]
 				end for
