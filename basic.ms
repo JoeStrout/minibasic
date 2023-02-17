@@ -457,6 +457,8 @@ Evaluator.collapseStack = function
 			self.doUnaryOp
 		else if self.stack.len > 2 then
 			self.doBinop
+		else if self.stack[-2] == "-" then
+			self.doUnaryOp
 		else
 			break
 		end if
