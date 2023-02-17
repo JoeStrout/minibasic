@@ -607,7 +607,7 @@ printErr = function(err)
 	if machine.lineIdx >= 0 and machine.lineNums.hasIndex(machine.lineIdx) then
 		loc = " in line " + machine.lineNums[machine.lineIdx]
 	end if
-	print "Error: " + err + loc
+	print char(7) + "Error: " + err + loc
 	machine.halt = true
 end function
 
@@ -758,6 +758,11 @@ ForLoopState.make = function(var, limit, step, topLine, topToken)
 	fls.topTokenIdx = topToken
 	return fls
 end function
+ForLoopState.done = function
+	curVal = machine.vars[self.var]
+	if self.step >= 0 then return curVal > self.limit
+	return curVal < self.limit
+end function
 
 // ReturnStackEntry: where a GOSUB came from (and returns to).
 ReturnStackEntry = {}
@@ -874,6 +879,15 @@ Machine.assignLvar = function(lvar, value)
 		self.vars[lvar.id] = value
 	end if
 	return true
+end function
+
+Machine.forLoopForVariable = function(varName)
+	i = self.forLoops.len - 1
+	while i >= 0
+		if self.forLoops[i].var == varName then return self.forLoops[i]
+		i = i - 1
+	end while
+	return null
 end function
 
 
@@ -1252,18 +1266,33 @@ Machine.cmd.LINE = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
-	// ToDo: handle NEXT arguments (one or more variable names)
+	// find a list of FOR loop variables to consider
 	if not machine.forLoops then return printErr("NEXT without FOR")
-	fls = machine.forLoops[-1]
-	machine.vars[fls.var] += fls.step
-	if fls.step > 0 and machine.vars[fls.var] > fls.limit or
-	   fls.step < 0 and machine.vars[fls.var] < fls.limit then
-		machine.forLoops.pop
-	else
-//		print "Sending machine to " + machine.lineNums[fls.topLineIdx] + " token " + fls.topTokenIdx
+	args = tokens[startIdx+1:endIdx]
+	args.removeVal ",", true
+	if not args then
+		// (...if none is given, then pick the most recent one)
+		args = [machine.forLoops[-1].var]
+	end if
+	// Now, for each of those, in order, find the corresponding for loop entry.
+	// If its complete, move on to the next one.  For the first one that's  not
+	// yet finished, apply the step and return to the top.
+	for varName in args
+		fls = machine.forLoopForVariable(varName)
+		if fls == null then return printErr("NEXT without FOR")
+		machine.vars[fls.var] += fls.step
+		if fls.step > 0 and machine.vars[fls.var] > fls.limit or
+		   fls.step < 0 and machine.vars[fls.var] < fls.limit then
+			// this one is done; pop the for loop back past this point
+			while machine.forLoops
+				if machine.forLoops.pop == fls then break
+			end while
+			continue
+		end if
+		// this one is not done; send machine to the top of the loop
 		machine.nextLineIdx = fls.topLineIdx
 		return fls.topTokenIdx
-	end if	
+	end for
 end function
 
 Machine.cmd.ON = function(tokens, startIdx, endIdx)

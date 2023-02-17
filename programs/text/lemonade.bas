@@ -107,7 +107,10 @@
 1120  PRINT : IF SC = 10 AND  RND (1) < .25 THEN 2300
 1130  PRINT "$$ LEMONSVILLE DAILY FINANCIAL REPORT $$"
 1135  PRINT 
-1139 REM ToDo: I really need to figure out what this sound routine sounded like.
+1136 REM ToDo: I really need to figure out what this sound routine sounded like.
+1137 REM addr 769 is duration; 255 = ~ 1 second.
+1138 REM 768 is pitch: 152->64, 128->67, 144->65
+1139 REM OK!  So, the note is 67 - (poke768 - 128)/8.
 1140  POKE 768,152: POKE 769,80: CALL 770
 1142  POKE 768,128: POKE 769,160: CALL 770
 1144  POKE 768,152: POKE 769,40: CALL 770
