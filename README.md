@@ -17,11 +17,12 @@ This is a little project to create an interpreter for the BASIC programming lang
 - support for multidimensional arrays
 - program management:
   - `NEW`
-  - `LIST` (note: not yet with range of line numbers)
+  - `LIST` (including range of line numbers)
   - `LISTREM` (lists only lines that start with `REM`)
   - `RUN`
   - `CAT` (lists files on disk)
   - `LOAD` _program name_ (e.g. `LOAD dice`)
+  - `SAVE` _program name_ (program name/path may be omitted if previously saved/loaded)
 - standard BASIC commands:
   - `PRINT` (or `?` for short), with `,` and `;`
   - `INPUT` (without prompt)
@@ -52,7 +53,6 @@ This is a little project to create an interpreter for the BASIC programming lang
 ## Features Still To Come ##
 
 - program management:
-  - `SAVE`
   - `RENAME`
   - `RENUMBER`
 - full typechecking (between string and numeric variables)
@@ -89,3 +89,9 @@ Detailed references on various old BASIC dialects can be hard to find.  But here
 - [Microsoft BASIC-80](https://usermanual.wiki/Document/BASIC8028MBASIC29ReferenceManual.204768585/view)
 - [Commodore-BASIC V2.0](https://www.c64-wiki.com/wiki/C64-Commands)
 - [Classic Usborne BASIC Programming Books](https://usborne.com/us/books/computer-and-coding-books)
+
+For discussion, consider:
+
+- [BASIC4ALL forum](http://basic4all.epizy.com/index.php)
+- [MiniScript forums](https://forums.miniscript.org/)
+
