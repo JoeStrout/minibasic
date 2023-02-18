@@ -415,7 +415,7 @@ end function
 // result onto the stack.
 Evaluator.doCallOrArray = function(call)
 	self.debugPrint "Evaluating a call: " + call
-	funcOrArrayName = call[0][:-1]
+	funcOrArrayName = call[0][:-1].upper
 	args = call[1:]
 	f = machine.fn.get(funcOrArrayName)
 	array = machine.arrs.get(funcOrArrayName)
@@ -546,11 +546,9 @@ Evaluator.evaluate = function(customLocals=null)
 			if canBail then break
 			if customLocals != null and customLocals.hasIndex(tok) then
 				value = customLocals[tok]
-			else if not machine.vars.hasIndex(tok) then
-				// old BASICS assume a null value for undefined variables
-				if tok.endsWith("$") then value = "" else value = 0
 			else
-				value = machine.vars[tok]
+				value = getValue(tok)
+				if value == null then return null
 			end if
 			self.stack.push value
 			if self.stack.len > 1 and self.stack[-2] == "-" and
@@ -611,6 +609,71 @@ printErr = function(err)
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
+end function
+
+getValue = function(identifier)
+	upperId = identifier.upper
+	if machine.vars.hasIndex(upperId) then
+		return machine.vars[upperId]
+	else if identifier.len < 3 then
+		if isNumericId(identifier) then return 0 else return ""
+	else
+		return printErr("undefined identifier '" + identifier + "'")
+	end if
+end function
+
+requireNum = function(value)
+	if not value isa number then return printErr("type mismatch")
+	return true
+end function
+
+requireStr = function(value)
+	if not value isa string then return printErr("type mismatch")
+	return true
+end function
+
+
+// Assign a value to the given lvar.  Returns true on success,
+// false if failed.
+setValue = function(lvar, value)
+	upperId = lvar.id.upper
+	if isNumericId(lvar.id) != (value isa number) then return printErr("type mismatch")
+	if lvar.isArrayElem then
+		if not machine.arrs.hasIndex(upperId) then
+			// old-BASIC quirk: even arrays exist automatically, as soon as they are
+			// referenced, with 1 dimension and a size of 10.  But we do this only
+			// for identifiers less than 3 characters long.
+			if lvar.id.len > 2 then return printErr("Undefined identifier")
+			if isNumericId(lvar.id) then arr = [0]*10 else arr = [""]*10
+			machine.arrs[upperId] = arr
+		end if
+		arr = machine.arrs[upperId]
+		index = lvar.index
+		if index isa list then
+			// dereference all but the LAST index 
+			// (which we'll use to assign the new value)
+			for idx in index[:-1]
+				if idx < 0 or idx >= arr.len then
+					printErr "array index (" + idx + ") out of bounds (0-" + (arr.len-1) + ")"
+					return false
+				end if
+				arr = arr[idx]
+			end for
+			index = index[-1]
+		end if		
+		if not index isa number then
+			printErr "array index must be a number"
+			return false
+		end if
+		if index < 0 or index >= arr.len then
+			printErr "array index (" + index + ") out of bounds (0-" + (arr.len-1) + ")"
+			return false
+		end if
+		arr[index] = value
+	else
+		machine.vars[upperId] = value
+	end if
+	return true
 end function
 
 syntaxColor = {}
@@ -753,7 +816,7 @@ ForLoopState.topLineIdx = 0
 ForLoopState.topTokenIdx = 0
 ForLoopState.make = function(var, limit, step, topLine, topToken)
 	fls = new ForLoopState
-	fls.var = var
+	fls.var = var.upper
 	fls.step = step
 	fls.limit = limit
 	fls.topLineIdx = topLine
@@ -843,47 +906,8 @@ Machine.reset = function
 	self.resetData
 end function
 
-// Assign a value to the given lvar.  Returns true on success,
-// false if failed.
-Machine.assignLvar = function(lvar, value)
-	if isNumericId(lvar.id) then value = val(value)
-	if lvar.isArrayElem then
-		if not self.arrs.hasIndex(lvar.id) then
-			// old-BASIC quirk: even arrays exist automatically, as soon as they are
-			// referenced, with 1 dimension and a size of 10.
-			if isNumericId(lvar.id) then arr = [0]*10 else arr = [""]*10
-			self.arrs[lvar.id] = arr
-		end if
-		arr = self.arrs[lvar.id]
-		index = lvar.index
-		if index isa list then
-			// dereference all but the LAST index 
-			// (which we'll use to assign the new value)
-			for idx in index[:-1]
-				if idx < 0 or idx >= arr.len then
-					printErr "array index out of bounds"
-					return false
-				end if
-				arr = arr[idx]
-			end for
-			index = index[-1]
-		end if		
-		if not index isa number then
-			printErr "array index must be a number"
-			return false
-		end if
-		if index < 0 or index >= arr.len then
-			printErr "array index out of bounds"
-			return false
-		end if
-		arr[index] = value
-	else
-		self.vars[lvar.id] = value
-	end if
-	return true
-end function
-
 Machine.forLoopForVariable = function(varName)
+	varName = varName.upper
 	i = self.forLoops.len - 1
 	while i >= 0
 		if self.forLoops[i].var == varName then return self.forLoops[i]
@@ -896,30 +920,49 @@ end function
 // Define all the built-in functions
 // (in alphabetical order below)
 Machine.fn = {}
-Machine.fn.ABS = function(n); return abs(n); end function
-Machine.fn.ASC = function(s); return code(s); end function
-Machine.fn.ATN = function(n); return atan(n); end function
-Machine.fn["CHR$"] = function(n); return char(n); end function
-Machine.fn.COS = function(n); return cos(n); end function
-Machine.fn.EXP = function(n); return mathUtil.e ^ n; end function
-Machine.fn.FIX = function(n); return int(n); end function
+Machine.fn.ABS = function(n); if requireNum(n) then return abs(n); end function
+Machine.fn.ASC = function(s); if requireStr(s) then return code(s); end function
+Machine.fn.ATN = function(n); if requireNum(n) then return atan(n); end function
+Machine.fn["CHR$"] = function(n); if requireNum(n) then return char(n); end function
+Machine.fn.COS = function(n); if requireNum(n) then return cos(n); end function
+Machine.fn.EXP = function(n); if requireNum(n) then return mathUtil.e ^ n; end function
+Machine.fn.FIX = function(n); if requireNum(n) then return int(n); end function
 Machine.fn["INKEY$"] = function(z);	if key.available then return key.get; return ""; end function
-Machine.fn.INT = function(n); return floor(n); end function
+Machine.fn.INT = function(n); if requireNum(n) then return floor(val(n)); end function
+Machine.fn.INSTR = function(args)
+	if not args isa list or args.len < 2 or args.len > 3 then return printErr("invalid arguments to INSTR")
+	if args.len == 2 then
+		start = 1
+		s = args[0]
+		substr = args[1]
+	else
+		start = args[0]
+		s = args[1]
+		substr = args[2]
+	end if
+	if requireNum(start) and requireStr(s) and requireStr(substr) then
+		result = s.indexOf(substr, start-2) + 1
+		if result == null then result = 0
+		return result
+	end if
+end function
 Machine.fn["LEFT$"] = function(args)
 	if not args isa list then return args
 	s = args[0]
 	if args.len > 1 then length = args[1] else length = s.len
-	return s[:length]
+	if requireStr(s) and requireNum(length) then return s[:length]
 end function
-Machine.fn.LEN = function(s); return len(s); end function
-Machine.fn.LOG = function(n); return mathUtil.ln(n); end function
-Machine.fn["LOWER$"] = function(s); return lower(s); end function
+Machine.fn.LEN = function(s); if requireStr(s) then return len(s); end function
+Machine.fn.LOG = function(n); if requireNum(n) then return mathUtil.ln(n); end function
+Machine.fn["LOWER$"] = function(s); if requireStr(s) then return lower(s); end function
 Machine.fn["MID$"] = function(args)
 	if not args isa list then return args
 	s = args[0]
 	if args.len > 1 then startPos = args[1] else startPos = 1
 	if args.len > 2 then length = args[2] else length = s.len
-	return s[startPos-1:startPos-1+length]
+	if requireStr(s) and requireNum(startPos) and requireNum(length) then
+		return s[startPos-1:startPos-1+length]
+	end if
 end function
 Machine.fn.POS = function(z)
 	if round(z) % 2 then return 26 - text.row else return text.column + 1
@@ -928,32 +971,37 @@ Machine.fn["RIGHT$"] = function(args)
 	if not args isa list then return args
 	s = args[0]
 	if args.len > 1 then length = args[1] else length = s.len
-	return s[-length:]
+	if requireStr(s) and requireNum(length) then return s[-length:]
 end function
-Machine.fn.RND = function(n); if n < 0 then rnd(n); return rnd; end  function
-Machine.fn.SGN = function(n); return sign(n); end function
-Machine.fn.SIN = function(n); return sin(n); end function
-Machine.fn["SPACES$"] = function(n); return " "*n; end function
-Machine.fn.SPC = function(n); print " "*n,""; return ""; end function
-Machine.fn.SQR = function(n); return sqrt(n); end function
-Machine.fn["STR$"] = function(n); return str(n); end function
+Machine.fn.RND = function(n)
+	if not requireNum(n) then return null
+	if n < 0 then rnd(n)		// (negative argument seeds; non-negative argument ignored)
+	return rnd;
+end function
+Machine.fn.SGN = function(n); if requireNum(n) then return sign(n); end function
+Machine.fn.SIN = function(n); if requireNum(n) then return sin(n); end function
+Machine.fn["SPACES$"] = function(n); if requireNum(n) then return " "*n; end function
+Machine.fn.SPC = function(n); if requireNum(n) then print " "*n,""; return ""; end function
+Machine.fn.SQR = function(n); if requireNum(n) then return sqrt(n); end function
+Machine.fn["STR$"] = function(n); if requireNum(n) then return str(n); end function
 Machine.fn.TAB = function(n)
 	if n isa list then
 		// With 2 or more arguments, take these as COL, ROW,
 		// and *always* move the cursor
+		if n.len != 2 then return printErr("invalid arguments to TAB")
+		if not requireNum(n[0]) or not requireNum(n[1]) then return
 		text.column = val(n[0]) - 1
 		text.row = 26 - val(n[1])
 	else
 		// With just 1 argument, it's column, and we move
 		// only if the current position is left of that.
-		n = val(n)
-		if n > text.column then text.column = n - 1; 
+		if requireNum(n) and n > text.column then text.column = n - 1; 
 	end if
 	return ""
 end function
-Machine.fn.TAN = function(n); return tan(n); end function
-Machine.fn["UPPER$"] = function(s); return upper(s); end function
-Machine.fn.VAL = function(s); return val(s); end function
+Machine.fn.TAN = function(n); if requireNum(n) then return tan(n); end function
+Machine.fn["UPPER$"] = function(s); if requireStr(s) then return upper(s); end function
+Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 
 // Functions skipped for now -- maybe ToDo:
 // HEX$ (convert number to hex)
@@ -1012,7 +1060,7 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
 	pos = startIdx + 1
 	while pos < endIdx
-		name = tokens[pos]
+		name = tokens[pos].upper
 		dims = [10]	// default to one dimension, max index of 10
 		pos += 1
 		if isOpenParen(name) then
@@ -1066,8 +1114,7 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
 		step = evalTokens(tokens[stepPos+1:endIdx])
 	end if
-	// ToDo: ensure we aren't already looping with this variable
-	machine.vars[var] = fromVal
+	machine.vars[var.upper] = fromVal
 	if endIdx + 1 < tokens.len then
 		lineIdx = machine.lineIdx; tokenIdx = endIdx + 1
 	else
@@ -1081,7 +1128,7 @@ Machine.cmd.GET = function(tokens, startIdx, endIdx)
 	if lvar == null then return printErr("incomplete GET statement")
 	k = key.get
 	if isNumericId(lvar.id) then k = k.code
-	machine.assignLvar lvar, k
+	setValue lvar, k
 end function
 
 Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
@@ -1230,7 +1277,7 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 				remainingInput = ""
 			end if
 		end if
-		machine.assignLvar lvar, value
+		setValue lvar, value
 		if varEndPos >= endIdx then break
 		if tokens[varEndPos] != "," then printErr("comma expected")
 		pos = varEndPos + 1
@@ -1248,7 +1295,7 @@ Machine.cmd.LET = function(tokens, startIdx, endIdx)
 	if lvar == null then return
 	
 	if tokens[varEndPos] != "=" then return printErr("syntax error in assignment")
-	machine.assignLvar lvar, evalTokens(tokens[varEndPos+1:endIdx])
+	setValue lvar, evalTokens(tokens[varEndPos+1:endIdx])
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
@@ -1353,7 +1400,7 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		eval.endIdx = endPos
 		value = eval.evaluate
 //		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
-		print value, ""
+		if value != null then print value, ""
 		if eval.nextTokIdx < endIdx then
 			nextTok = tokens[eval.nextTokIdx]
 			if nextTok == "," then print " ", ""
@@ -1384,7 +1431,7 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
 		machine.nextDataIdx += 1
-		machine.assignLvar lvar, value
+		setValue lvar, value
 		if varEndPos >= endIdx or tokens[varEndPos] != "," then break
 		pos = varEndPos + 1
 	end while
