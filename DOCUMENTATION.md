@@ -12,6 +12,19 @@ That last design goal is achieved by running MiniBASIC on [Mini Micro](https:min
 
 ## Overview
 
+- There is always exactly one (possibly empty) program in memory at a time.
+- Every line of a program must begin with a line number.
+- Programs are created or edited by typing lines (starting with the line number) at the prompt.  Typing a line number alone deletes that line.
+- The current program is listed with LIST, or to see only REM (remark) lines, use LISTREM.
+- The current program may be saved with SAVE, loaded with LOAD, and cleared with NEW.
+- Commands and identifiers are case-insensitive.  (E.g., xvelocity, XVelocity, and xVeLoCiTy are all the same variable.)
+- Variable names ending in `$` are strings; any others are numeric.
+- Scalar variables do not have to be declared; they are created upon assignment.  Array variables are declared with DIM or REDIM.
+- Variable names of one or two letters exist automatically, even if not assigned to; numeric variables have a default value of 0, and string variables have a default value of empty string.  This includes arrays: one- or two-letter arrays, if not DIM or REDIM'd, exist as one-dimensional arrays with a dimension of 10.
+- Variables more than two letters long do _not_ exist unless assigned to (for scalars) or declared with DIM/REDIM (for arrays).
+- All variables are global.
+- Arrays may be of any dimension, and are indexed with parentheses, e.g. N(4) or A$(42).  Valid array indexes are from 0 up to (and including) the size given in the DIM or REDIM statement.
+
 ## Functions
 
 The following built-in functions are available in MiniBASIC.  These must be used as an argument to a command, or as part of some larger expression.
