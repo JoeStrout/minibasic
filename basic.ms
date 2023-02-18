@@ -688,6 +688,51 @@ syntaxColor.comment = "#FFFFFF"
 syntaxColor.keyword = "#FF88FF"
 syntaxColor.colon = syntaxColor.lineNum
 
+// Convert the given line of the program to plain text.  This is similar
+// to listOneLine, but without syntax coloring (and it returns the string
+// instead of printing it.
+getLineAsText = function(lineNum, tokens)
+	result = []
+	result.push str(lineNum) + " "
+	space = ""
+	for tok in tokens
+		if tok == "REM" then
+			result.push space + tok + " "
+			if tokens.len > 1 then result.push tokens[-1]
+			break
+		else if keywords.contains(tok) then
+			result.push space + tok + " "
+			space = ""
+		else if tok == ":" then
+			result.push space + tok + " "
+			space = ""
+		else if tok == "," or tok == ";" or tok == "(" or tok == ")" then
+			result.push tok
+			space = " " * (tok != "(")
+		else if tok[-1] == "(" then
+			id = tok[:-1]
+			result.push space + id
+			tok = tok[-1]
+			result.push tok
+			space = ""
+		else if operators.contains(tok) then
+			result.push space + tok
+			space = " "
+		else if tok isa number or isNumericId(tok) then
+			result.push space + tok
+			space = " "
+		else if tok.startsWith("""") or isStringId(tok) then
+			result.push space + tok
+			space = " "
+		else
+			result.push space + tok
+			space = " "
+		end if
+	end for
+	return result.join("")
+end function
+
+// Print the given line of the program, with syntax coloring.
 listOneLine = function(lineNum, tokens)
 	if machine.comeFrom.hasIndex(lineNum) then
 		text.color = syntaxColor.lineNumTarget
@@ -765,45 +810,80 @@ end function
 repl = function(line)
 	tokens = tokenize(line)
 	if not tokens then return
-	cmd = tokens[0]
-	if cmd isa string then cmd = cmd.upper
-	if cmd isa number then
-		lineNum = cmd
+	if tokens[0] isa number then
+		lineNum = tokens[0]
 		if tokens.len == 1 then
 			machine.program.remove lineNum
 		else
 			if lineNum < 0 then return printErr("Line numbers must be nonnegative.")
 			machine.program[lineNum] = tokens[1:]
 		end if
-	else if cmd == "NEW" then
-		machine.reset
-	else if cmd == "LIST" then
-		listProgram getRange(tokens, 1)
-	else if cmd == "LISTREM" then	// why didn't anyone else think of this?
-		listProgram getRange(tokens, 1), true
-	else if cmd == "RUN" then
-		machine.runProgram
-	else if cmd == "CAT" or cmd == "DIR" then
-		path = stripQuotes(line[4:].trim)
-		dir path
-	else if cmd == "CD" then
-		path = stripQuotes(line[3:].trim)
-		cd path
-	else if cmd == "LOAD" then
-		name = stripQuotes(line[4:].trim) - ".bas" + ".bas"
-		lines = file.readLines(name)
-		if lines == null then
-			print "Unable to read program " + name
-		else
-			machine.reset
-			for line in lines
-				repl line
-			end for
-			print machine.program.len + " lines loaded from " + name
-		end if
-	else
-		machine.doImmediate tokens
+		return
 	end if
+	pos = 0
+	while pos < tokens.len
+		endPos = tokens.indexOfAnyParenSavvy([":"], pos, tokens.len, tokens.len)
+		cmd = tokens[pos]
+		if cmd isa string then cmd = cmd.upper
+		args = tokens[pos+1:endPos]
+		if cmd == "NEW" then
+			machine.reset
+		else if cmd == "LIST" then
+			listProgram getRange(args)
+		else if cmd == "LISTREM" then	// why didn't anyone else think of this?
+			listProgram getRange(args), true
+		else if cmd == "RUN" then
+			machine.runProgram
+		else if cmd == "CAT" or cmd == "DIR" then
+			args.apply(@stripQuotes)
+			path = args.join("").trim
+			dir path
+		else if cmd == "CD" then
+			path = args.apply(@stripQuotes).join.trim
+			cd path
+		else if cmd == "PWD" then
+			print file.curdir
+		else if cmd == "LOAD" then
+			args.apply(@stripQuotes)
+			path = args.join("").trim
+			path = path - ".bas" + ".bas"
+			lines = file.readLines(path)
+			if lines == null then
+				print "Unable to read program " + path
+			else
+				machine.reset
+				for line in lines
+					repl line
+				end for
+				print machine.program.len + " lines loaded from " + path
+				machine.programPath = path	// ToDo: get full path
+			end if
+		else if cmd == "SAVE" then
+			args.apply(@stripQuotes)
+			path = args.join("").trim
+			if not path then path = programPath
+			path = path - ".bas" + ".bas"
+			if not path then
+				print "No path specified; unable to save"
+			else
+				pgm = []
+				for lineNum in machine.program.sortedIndexes
+					pgm.push getLineAsText(lineNum, machine.program[lineNum])
+				end for
+				err = file.writeLines(path, pgm)
+				if err then
+					print err
+					globals.wtf = pgm
+				else
+					print pgm.len + " lines saved to " + path
+					machine.programPath = path	// ToDo: get full path
+				end if
+			end if
+		else
+			machine.doImmediate tokens[pos:endPos]
+		end if
+		pos = endPos + 1
+	end while
 end function
 
 // ForLoopState: represents the state of one active FOR loop,
@@ -877,6 +957,7 @@ end function
 // Machine State:
 Machine = {}
 Machine.program = {}		// key: line number; value: tokens
+Machine.programPath = ""	// where this path was stored on disk
 Machine.lineNums = []		// sorted list of line numbers
 Machine.lineIdx = 0			// index into lineNums for current line
 Machine.tokenIdx = 0		// which token starts the current statement in that line
@@ -901,6 +982,7 @@ end function
 
 Machine.reset = function
 	self.program = {}
+	self.programPath = ""
 	self.lineNums = []
 	self.lineIdx = 0
 	self.resetData
@@ -964,8 +1046,8 @@ Machine.fn["MID$"] = function(args)
 		return s[startPos-1:startPos-1+length]
 	end if
 end function
-Machine.fn.POS = function(z)
-	if round(z) % 2 then return 26 - text.row else return text.column + 1
+Machine.fn.POS = function(n)
+	if round(n) % 2 then return 26 - text.row else return text.column + 1
 end function
 Machine.fn["RIGHT$"] = function(args)
 	if not args isa list then return args
@@ -1007,7 +1089,6 @@ Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 // HEX$ (convert number to hex)
 // OCT$ (convert number to octal)
 // INPUT$ (from MBASIC-80)
-// INSTR (substring search)
 // PEEK, POKE
 // STRING$
 
@@ -1017,6 +1098,7 @@ Machine.cmd = {}
 
 Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
 	machine.vars = {}
+	machine.arrs = {}
 end function
 
 Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
@@ -1299,19 +1381,13 @@ Machine.cmd.LET = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
-	// ToDo: when we have functions that take multiple arguments (and
-	// so involve commas), we will need to change how this works.  We
-	// really need our expression parser to just grab all it can, and
-	// then return where it left off.
-	// But for now, a quick hack:
-	commaPos = tokens.indexOf(",", startIdx)
-	if commaPos == null or commaPos >= endIdx then
-		return printErr("Incomplete PLOT statement")
+	args = getArguments(tokens, startIdx+1)
+	if args.len != 2 then return printErr("invalid arguments to LINE")
+	x = args[0]; y = args[1]
+	if requireNum(x) and requireNum(y) then
+		gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color
+		machine.plotPos = [x,y]
 	end if
-	x = evalTokens(tokens[startIdx+1:commaPos])
-	y = evalTokens(tokens[commaPos+1:endIdx])
-	gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color
-	machine.plotPos = [x,y]
 end function
 
 Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
@@ -1368,19 +1444,13 @@ Machine.cmd.ON = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
-	// ToDo: when we have functions that take multiple arguments (and
-	// so involve commas), we will need to change how this works.  We
-	// really need our expression parser to just grab all it can, and
-	// then return where it left off.
-	// But for now, a quick hack:
-	commaPos = tokens.indexOf(",", startIdx)
-	if commaPos == null or commaPos >= endIdx then
-		return printErr("Incomplete PLOT statement")
+	args = getArguments(tokens, startIdx+1)
+	if args.len != 2 then return printErr("invalid arguments to PLOT")
+	x = args[0]; y = args[1]
+	if requireNum(x) and requireNum(y) then
+		gfx.setPixel x, y, gfx.color
+		machine.plotPos = [x,y]
 	end if
-	x = evalTokens(tokens[startIdx+1:commaPos])
-	y = evalTokens(tokens[commaPos+1:endIdx])
-	gfx.setPixel x, y, gfx.color
-	machine.plotPos = [x,y]
 end function
 
 Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
@@ -1762,7 +1832,7 @@ machine.reset
 machine.cmd.HOME
 runUnitTests
 
-print "MiniBasic 0.05"
+print "MiniBasic 0.1"
 
 // HACK For testing
 repl "10 gosub 100: if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"""
