@@ -25,7 +25,7 @@ That last design goal is achieved by running MiniBASIC on [Mini Micro](https:min
 - All variables are global.
 - Arrays may be of any dimension, and are indexed with parentheses, e.g. N(4) or A$(42).  Valid array indexes are from 0 up to (and including) the size given in the DIM or REDIM statement.
 
-## Functions
+## BASIC Functions
 
 The following built-in functions are available in MiniBASIC.  These must be used as an argument to a command, or as part of some larger expression.
 
@@ -58,7 +58,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | UPPER$(_a$_) | string _a$_ converted to uppercase; see also LOWER$ |
 | VAL(_a$_) | converts _a$_ to a number, if possible; else 0 |
 
-## Commands
+## BASIC Commands
 
 The following table lists all MiniBASIC commands.  A command is used as a statement on its own, either in immediate mode or as part of a program line; it may not be used as part of a larger expression.
 
@@ -95,3 +95,19 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | VTAB _n_ | moves the text cursor to row _n_ (1-25, with 1 at the top); see also HTAB |
 | WAIT \[_n_] | pauses the program for _n_ seconds (default 1) before proceeding with the next statement
 
+## Shell Commands
+
+At the `>` interactive prompt, you may type and execute BASIC code immediately; or enter lines of code; or use one of the following shell commands, which are _only_ usable at the prompt (i.e. not in a program).
+
+| Command | Effect |
+|---------|--------|
+| CAT\[ALOG\] | list contents of the current directory; synonym for DIR |
+| CD _path_ | change the current directory to the given _path_.  Path separators are `/`; use `..` to go up a level |
+| DIR | list contents of the current directory; CAT and CATALOG are synonyms |
+| LIST \[_from_ - _to_\] | list the current program, or some range of line numbers; _from_ or _to_ may be omitted to list from the beginning or to the end of the program, respectively |
+| LISTREM \[_from_ - _to_\] | similar to LIST, but shows only lines that begin with REM |
+| LOAD _path_ | load the BASIC program at _path_ relative to the current directory (`.bas` extension may be omitted) |
+| NEW | clear the current program and all variables |
+| PWD | print working directory (i.e., path to the current directory |
+| RUN | reset DATA pointers and all variables, then run the current program from the beginning |
+| SAVE \[_path_\] | save the current program to _path_ relative to the current directory (`.bas` extension may be omitted); if _path_ is omitted, saves to the previous program path, if any |
