@@ -834,7 +834,7 @@ repl = function(line)
 			listProgram getRange(args), true
 		else if cmd == "RUN" then
 			machine.runProgram
-		else if cmd == "CAT" or cmd == "DIR" then
+		else if cmd == "CAT" or cmd == "CATALOG" or cmd == "DIR" then
 			args.apply(@stripQuotes)
 			path = args.join("").trim
 			dir path
@@ -985,6 +985,7 @@ Machine.reset = function
 	self.programPath = ""
 	self.lineNums = []
 	self.lineIdx = 0
+	self.programPath = ""
 	self.resetData
 end function
 
@@ -1832,23 +1833,7 @@ machine.reset
 machine.cmd.HOME
 runUnitTests
 
-print "MiniBasic 0.1"
-
-// HACK For testing
-repl "10 gosub 100: if 2+2 = 4 AND COS(0) = 1 then print ""Yep!"""
-repl "15 I = INT(RND(0)*5)"
-repl "20 ? ""I is "";I: ON I GOTO 50, 60,70"
-repl "30 ? ""That's not in the range 1-3, apparently."": END"
-repl "50 ? ""one"": GOTO 80"
-repl "60 ? ""two"": GOTO 80"
-repl "70 ? ""three"": GOTO 80"
-repl "80 END"
-repl "100 REM Test Subroutine"
-repl "110 print: print ""====="": print"
-repl "120 return"
-repl "90 DATA ""hello bob"", 123.45, -43"
-repl "200 DATA 42, test, ""test with space"""
-repl "list"
+print "MiniBasic 0.5"
 
 basic = function
 	reset
