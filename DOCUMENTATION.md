@@ -14,7 +14,7 @@ That last design goal is achieved by running MiniBASIC on [Mini Micro](https:min
 
 ## Functions
 
-The following built-in functions are available in MiniBASIC.
+The following built-in functions are available in MiniBASIC.  These must be used as an argument to a command, or as part of some larger expression.
 
 | Function | Result |
 |----------|--------|
@@ -44,3 +44,32 @@ The following built-in functions are available in MiniBASIC.
 | TAN(_n_) | tangent of _n_ radians |
 | UPPER$(_a$_) | string _a$_ converted to uppercase; see also LOWER$ |
 | VAL(_a$_) | converts _a$_ to a number, if possible; else 0 |
+
+## Commands
+
+The following table lists all MiniBASIC commands.  A command is used as a statement on its own, either in immediate mode or as part of a program line; it may not be used as part of a larger expression.
+
+| Command | Effect |
+|---------|--------|
+| CLEAR | clears all variables from memory (but leaves program intact) |
+| CLS | clears the screen (both text and graphics); resets the text cursor to row 26, column 0; and resets the plot point to 0,0; HOME is a synonym |
+| COLOR _x_ | if _x_ is a number, sets text and graphic color to palette color _x_ (0-15); if a _x_ is a string, sets text and graphic color to that HTML color (e.g. "#FF000088" for transparent red) |
+| DATA _list_ | defines a comma-separated list of data for use with READ and RESTORE.  Data elements may be strings or numbers; strings must be enclosed in quotes if they contain spaces or punctuation |
+| DEF FN _name_(_n_) = _expr_ | define a user-defined function; subsequent use of FN _name_(_n_) will be evaluated as expression _expr_, with the actual value substituted for _n_ |
+| DIM _name_(_n_ \[,_m_ ...\]) | declare an array with valid indexes from 0 to _n_ inclusive, or a multidimensional array with additional dimensions _m_, etc.  Array will be numeric unless _name_ ends in `$`, in which case it is a string array |
+| END | halts the current program and returns to the MiniBASIC prompt; STOP is a synonym |
+| FOR _var_ = _n_ TO _m_ \[STEP _s_\] | begins a FOR loop running from _n_ to _m_, steps of _s_ (default 1) |
+| GET _var_ | waits for a keypress to appear in the keyboard buffer, then returns it.  If _var_ is a string variable, returns the character pressed; if it is a numeric variable, returns the ASC value of the character pressed |
+| GOSUB _lineNum_ | pushes the next statement onto the RETURN stack, then jumps to line _lineNum_ |
+| GOTO _lineNum_ | jumps to line _lineNum_ |
+| HOME | clears the screen (both text and graphics); resets the text cursor to row 26, column 0; and resets the plot point to 0,0; synonym for CLS |
+| HTAB _n_ | moves the text cursor to column _n_; see also VTAB |
+| IF _expr_ THEN _result1_ \[ELSE _result2_] | if _expr_ is true (nonzero), then do _result1_, which may be either a line number to jump to, or one or more statements joined by `:`; otherwise jump to _result2_ if specified, or the next line.  If statements may be nested. |
+| INPUT \[prompt\, ] _var_ \[, _var2_ ...] | prints "?" if no _prompt_ specified, or if _prompt_ is followed by `;`; then waits for the user to enter a value to be stored in _var_ (or several values, separated by whitespace or commas, to be stored in _var_, _var2_, etc.).  Note that when reading into a string variable, input stops at a comma **unless** it is the last variable in the input list, in which case it reads all the way to the line break |
+| \[LET\] _var_ = _expr_ | assigns the value of _expr_ to the variable _var_, which must be of the same type.  Note that `LET` is optional |
+| LINE _x_, _y_ | draws a line from current plot position, to position _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and updates the plot position to the new coordinates |
+| NEXT \[_var_ \[, _var2_ ...\]\] | increments the nearest or specified FOR loop variable and jumps to the top of the loop, unless that loop is complete, in which case it advances to the next specified variable or the next statement |
+| ON _expr_ GOTO _lineNum1_, _lineNum2_, ... | jumps to the line number corresponding to the (floored) value of _expr_, starting at 1 for _lineNum1_, etc.  If _expr_ evaluates to less than 1 or more than the number of line numbers given, control proceeds to the next statement |
+| PLOT _x_, _y_ | plots pixel _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and sets the plot position used with subsequent LINE |
+| STOP | halts the current program and returns to the MiniBASIC prompt; synonym for END |
+
