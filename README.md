@@ -15,6 +15,8 @@ Features still planned:
   - `RENUMBER`
   - more drawing routines: `DRAWRECT`, `FILLRECT`, `DRAWOVAL`, `FILLOVAL`, `DRAWPOLY`, `FILLPOLY`, and `DRAWIMAGE`
 
+See the **[Documentation](DOCUMENTATION.md)** for general notes as well as a complete reference of all available functions and commands.
+
 ## Sample Programs
 
 Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  These should all work now; please open an issue if you find any of them broken.
