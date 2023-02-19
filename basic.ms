@@ -422,7 +422,7 @@ Evaluator.doCallOrArray = function(call)
 	if @f == null and array == null then
 		// old-BASIC quirk: even arrays exist automatically, as soon as they are
 		// referenced, with 1 dimension and a size of 10.
-		if isNumericId(funcOrArrayName) then array = [0]*10 else array = [""]*10
+		if isNumericId(funcOrArrayName) then array = [0]*11 else array = [""]*11
 		machine.arrs[funcOrArrayName] = array
 	end if
 	if @f then
@@ -567,7 +567,7 @@ Evaluator.evaluate = function(customLocals=null)
 	if self.stack.len > 1 then
 		printErr "Syntax error -- extra stuff on self.stack: " + self.stack
 	end if
-	return self.stack[0]
+	if self.stack then return self.stack[0]
 end function
 
 // Evaluate the given string of tokens, which should comprise a single expression.
@@ -684,7 +684,7 @@ setValue = function(lvar, value)
 			// referenced, with 1 dimension and a size of 10.  But we do this only
 			// for identifiers less than 3 characters long.
 			if lvar.id.len > 2 then return printErr("Undefined identifier")
-			if isNumericId(lvar.id) then arr = [0]*10 else arr = [""]*10
+			if isNumericId(lvar.id) then arr = [0]*11 else arr = [""]*11
 			machine.arrs[upperId] = arr
 		end if
 		arr = machine.arrs[upperId]
@@ -1229,7 +1229,8 @@ Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
 		gfx.fillEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
 	else
 		gfx.drawEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
-	end if	
+	end if
+	machine.plotPos = args[2:]
 end function
 
 Machine.cmd.END = function(tokens, startIdx, endIdx)
@@ -1512,10 +1513,18 @@ Machine.cmd.ON = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
-	args = getArguments(tokens, startIdx+1)
+	args = getArguments(tokens, startIdx+1, true)
 	if args.len != 2 then return printErr("invalid arguments to PLOT")
 	x = args[0]; y = args[1]
-	if requireNum(x) and requireNum(y) then
+	if x isa list and y isa list then
+		if x.len > y.len then maxi = x.len-1 else maxi = y.len-1
+		if maxi < 0 then return
+		if not requireNum(x[0]) or not requireNum(y[0]) then return
+		for i in range(0, maxi)
+			gfx.setPixel x[i], y[i], gfx.color
+		end for
+		machine.plotPos = [x[-1], y[-1]]
+	else if requireNum(x) and requireNum(y) then
 		gfx.setPixel x, y, gfx.color
 		machine.plotPos = [x,y]
 	end if
@@ -1586,7 +1595,8 @@ Machine.cmd.RECT = function(tokens, startIdx, endIdx)
 		gfx.fillRect x[0], y[0], x[1] - x[0], y[1] - y[0]
 	else
 		gfx.drawRect x[0], y[0], x[1] - x[0], y[1] - y[0]
-	end if	
+	end if
+	machine.plotPos = args[2:]
 end function
 
 Machine.cmd.REDIM = function(tokens, startIdx, endIdx)
