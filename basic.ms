@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PIXEL GET WAIT SOUND".split +
+  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
@@ -1094,6 +1094,21 @@ Machine.fn["MID$"] = function(args)
 		return s[startPos-1:startPos-1+length]
 	end if
 end function
+Machine.fn.PIXEL = function(xy)
+	if not xy isa list or len(xy) != 2 then return printErr("invalid arguments to PIXEL")
+	x = xy[0]; y = xy[1]
+	if not requireNum(x) or not requireNum(y) then return null
+	c = gfx.pixel(x,y)
+	colorNum = palette.indexOf(c[:7])
+	if colorNum == null then return -1
+	return colorNum
+end function
+Machine.fn["PIXEL$"] = function(xy)
+	if not xy isa list or len(xy) != 2 then return printErr("invalid arguments to PIXEL$")
+	x = xy[0]; y = xy[1]
+	if not requireNum(x) or not requireNum(y) then return null
+	return gfx.pixel(x,y)[:7]
+end function
 Machine.fn.POS = function(n)
 	if round(n) % 2 then return 26 - text.row else return text.column + 1
 end function
@@ -1593,13 +1608,14 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		// by any delimiters.  This is weird, but something old BASICS did,
 		// and you can find old BASIC programs that actually use this.  :(		
 		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
-		if pos == endPos then break			
+		if pos == endIdx then break			
 //		print "Now to print: " + tokens[pos:endPos]
 		eval.nextTokIdx = pos
 		eval.endIdx = endPos
 		value = eval.evaluate
 //		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
-		if value != null then print value, ""
+		if value == null then return
+		print value, ""
 		if eval.nextTokIdx < endIdx then
 			nextTok = tokens[eval.nextTokIdx]
 			if nextTok == "," then print " ", ""

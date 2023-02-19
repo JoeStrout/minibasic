@@ -45,6 +45,8 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | LEN(_a$_) | length of (i.e. number of characters in) _a$_ |
 | LOWER$(_s_) | string _s_ converted to lowercase; see also UPPER$ |
 | MID$(_a$_, _n_ \[, _m_\]) | substring of _a$_ starting at _n_ and containing up to _m_ characters; if _m_ is not specified, returns the rest of _a$_ |
+| PIXEL(_x_,_y_) | returns the color of the graphics layer at pixel _x_, _y_, as a number 0-15 corresponding to the COLOR palette; returns -1 if pixel color is not in the palette |
+| PIXEL$(_x_,_y_) | returns the color of the graphics layer at pixel _x_, _y_, as an HTML color string, e.g. "#00CC55" |
 | POS(_n_) | when _n_ is even, returns the current text cursor column; when odd, returns text cursor row |
 | RIGHT$(_a$_, _n_) | rightmost _n_ characters of string _a$_; see also LEFT$, MID$ |
 | SGN(_n_) | sign of _n_, i.e. 1 if _n_ > 0, -1 if _n_ < 0, and 0 if _n_ = 0 |
@@ -70,7 +72,9 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | DATA _list_ | defines a comma-separated list of data for use with READ and RESTORE.  Data elements may be strings or numbers; strings must be enclosed in quotes if they contain spaces or punctuation |
 | DEF FN _name_(_n_) = _expr_ | define a user-defined function; subsequent use of FN _name_(_n_) will be evaluated as expression _expr_, with the actual value substituted for _n_ |
 | DIM _name_(_n_ \[,_m_ ...\]) | declares an array with valid indexes from 0 to _n_ inclusive, or a multidimensional array with additional dimensions _m_, etc.  Array will be numeric unless _name_ ends in `$`, in which case it is a string array.  Throws an error if _name_ is already in use as an array. |
+| ELLIPSE \[_x1_, _y1_ TO\] _x2_, _y2_ | draws or fills an ellipse from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | END | halts the current program and returns to the MiniBASIC prompt; STOP is a synonym |
+| FILL \[ON|OFF\] | turns fill mode ON or OFF, controlling behavior of subsequent RECT, ELLIPSE, or POLY command |
 | FOR _var_ = _n_ TO _m_ \[STEP _s_\] | begins a FOR loop running from _n_ to _m_, steps of _s_ (default 1) |
 | GET _var_ | waits for a keypress to appear in the keyboard buffer, then returns it.  If _var_ is a string variable, returns the character pressed; if it is a numeric variable, returns the ASC value of the character pressed |
 | GOSUB _lineNum_ | pushes the next statement onto the RETURN stack, then jumps to line _lineNum_ |
@@ -78,14 +82,17 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | HOME | clears the screen (both text and graphics); resets the text cursor to row 1, column 1; and resets the plot point to 0,0; synonym for CLS |
 | HTAB _n_ | moves the text cursor to column _n_ (1-68); see also VTAB |
 | IF _expr_ THEN _result1_ \[ELSE _result2_] | if _expr_ is true (nonzero), then do _result1_, which may be either a line number to jump to, or one or more statements joined by `:`; otherwise jump to _result2_ if specified, or the next line.  If statements may be nested. |
+| IMAGE _path$_, \[_x1_, _y1_ TO\] _x2_, _y2_ | draws an image found on disk at _path_.  If given only _x2_, _y2_, draws the image at its native size and centered on that point; if given four coordinates and/or TO, then stretches the image as needed to fit the rectangular area given; updates the plot position to _x2_, _y2_ in either case |
 | INPUT \[prompt\, ] _var_ \[, _var2_ ...] | prints "?" if no _prompt_ specified, or if _prompt_ is followed by `;`; then waits for the user to enter a value to be stored in _var_ (or several values, separated by whitespace or commas, to be stored in _var_, _var2_, etc.).  Note that when reading into a string variable, input stops at a comma **unless** it is the last variable in the input list, in which case it reads all the way to the line break |
 | \[LET\] _var_ = _expr_ | assigns the value of _expr_ to the variable _var_, which must be of the same type.  Note that `LET` is optional |
-| LINE _x_, _y_ | draws a line from current plot position, to position _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and updates the plot position to the new coordinates |
+| LINE \[_x1_, _y1_ TO\] _x2_, _y2_ | draws a line from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | NEXT \[_var_ \[, _var2_ ...\]\] | increments the nearest or specified FOR loop variable and jumps to the top of the loop, unless that loop is complete, in which case it advances to the next specified variable or the next statement |
 | ON _expr_ GOTO _lineNum1_, _lineNum2_, ... | jumps to the line number corresponding to the (floored) value of _expr_, starting at 1 for _lineNum1_, etc.  If _expr_ evaluates to less than 1 or more than the number of line numbers given, control proceeds to the next statement |
-| PLOT _x_, _y_ | plots pixel _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and sets the plot position used with subsequent LINE |
+| PLOT _x_, _y_ | plots pixel _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and sets the plot position used with subsequent drawing; may also take arrays to plot multiple points |
+| POLY _x()_, _y()_ | draws or fills a polygon defined by arrays _x()_ and _y()_, updating the plot position to the last point in the arrays |
 | PRINT \[_expr_, _expr_, ...] | prints zero or more expressions to the text display.  Expressions may be separated by `,`, `;`, or whitespace; a `,` will print a comma, while `;` or whitespace results in no additional space printed.  If the list of expressions does not end with `,`, `;`, or TAB(), then a line break is printed after the last expression.  PRINT may be abbreviated `?` |
 | READ _var_ \[, _var2_, ...] | reads the next DATA term into the given variable. Any number of variables may be specified, separated by `,`, to be read in order.  Generates an error if there is insufficient DATA left to be read.  See also RESTORE |
+| RECT \[_x1_, _y1_ TO\] _x2_, _y2_ | draws or fills a rectangle from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | REDIM _name_(_n_ \[,_m_ ...\]) | declares an array with valid indexes from 0 to _n_ inclusive, or a multidimensional array with additional dimensions _m_, etc.  Acts just like DIM except that it does not throw an error if the array already exists; in such a case, the previous data is lost as the new array is always cleared |
 | REM _text_ | creates a "remark" or comment in the program; any text between REM and the line break is ignored by MiniBASIC.  Note that if REM is the first statement on a line, then it will be included in the output of the LISTREM command |
 | RESTORE \[_lineNum_] | resets the DATA pointer (i.e., the next datum read by the READ command) to the first DATA at or after the given _lineNum_, or if no line number is given, then the first DATA in the program |
