@@ -8,12 +8,12 @@ This is a little project to create an interpreter for the BASIC programming lang
 
 ## Current Status ##
 
-MiniBASIC is nearly complete.  The full standard BASIC language has been implemented, plus a few nice additions like PLOT, LINE, and SOUND.
+MiniBASIC is nearly complete.  The full standard BASIC language has been implemented, plus a few nice additions like PLOT, LINE, RECT, ELLIPSE, POLY, and SOUND.
 
 Features still planned:
   - `RENAME`
   - `RENUMBER`
-  - more drawing routines: `DRAWRECT`, `FILLRECT`, `DRAWOVAL`, `FILLOVAL`, `DRAWPOLY`, `FILLPOLY`, and `DRAWIMAGE`
+  - better error trapping, e.g., using `;` between statements rather than `:`
 
 See the **[Documentation](DOCUMENTATION.md)** for general notes as well as a complete reference of all available functions and commands.
 

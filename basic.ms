@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY PIXEL GET WAIT SOUND".split +
+  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PIXEL GET WAIT SOUND".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
@@ -602,7 +602,7 @@ end function
 // (but allow another comma to replace the TO), or just [TO] x2, y2
 // (and x1,y1 is then fetched from machine.plotPos).
 // Returns null in case of invalid syntax.
-getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false)
+getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false, assumeFrom = true)
 	result = []
 	pos = startIdx
 	eval = Evaluator.make(tokens)
@@ -611,6 +611,7 @@ getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false)
 	if tokens[startIdx] == "TO" then
 		toPos = 0
 		pos += 1
+		assumeFrom = true
 	end if
 	while pos < tokens.len
 		if tokens[pos] == ":" then break
@@ -628,7 +629,7 @@ getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false)
 	// validate the syntax
 	if result.len == 2 then
 		if toPos != null and toPos != 0 then return null
-		result = machine.plotPos + result		
+		if assumeFrom then result = machine.plotPos + result		
 	else if result.len == 4 then
 		if toPos != null and toPos != 2 then return null
 	else
@@ -1018,7 +1019,11 @@ Machine.resetData = function
 	self.arrs = {}
 	self.forLoops = []
 	self.nextDataIdx = 0
+	self.images = {}
 	self.plotPos = [0,0]
+	self.fill = false
+	self.images = {}
+	gfx.color = palette[5]
 end function
 
 Machine.reset = function
@@ -1027,7 +1032,6 @@ Machine.reset = function
 	self.lineNums = []
 	self.lineIdx = 0
 	self.programPath = ""
-	self.fill = false
 	self.trace = false
 	self.resetData
 end function
@@ -1371,6 +1375,34 @@ Machine.cmd.IF = function(tokens, startIdx, endIdx)
 	end if
 end function
 
+Machine.cmd.IMAGE = function(tokens, startIdx, endIdx)
+	if startIdx+2 >= endIdx then return printErr("incomplete IMAGE statement")
+	commaPos = tokens.indexOfAnyParenSavvy([",", "TO"], startIdx+1, endIdx, endIdx)	
+	path = evalTokens(tokens[startIdx+1:commaPos])
+	if not path isa string then return printErr("type mismatch error in IMAGE")
+	if machine.images.hasIndex(path) then
+		image = machine.images[path]
+	else
+		image = file.loadImage(path)
+		if not image then return printErr("no image found at """ + path + """")
+	end if
+	startIdx = commaPos + (tokens[commaPos] == ",")
+	args = getDrawingArgs(tokens, startIdx, false, false)
+	if args == null then return printErr("syntax error in IMAGE")
+	if args.len == 2 then
+		// draw centered on the given coordinates
+		gfx.drawImage image, args[0] - image.width/2, args[1] - image.height/2
+		machine.plotPos = args
+	else
+		// draw to fill the given bounds
+		if args.len != 4 then return printErr("invalid arguments to IMAGE")
+		x = [args[0], args[2]] //;	x.sort
+		y = [args[1], args[3]] //; y.sort
+		gfx.drawImage image, x[0], y[0], x[1] - x[0], y[1] - y[0]
+		machine.plotPos = args[2:]
+	end if
+end function
+
 Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 	// Another quirky function (http://basic4all.epizy.com/index.php?topic=372).
 	// Our version:
@@ -1528,6 +1560,26 @@ Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
 		gfx.setPixel x, y, gfx.color
 		machine.plotPos = [x,y]
 	end if
+end function
+
+Machine.cmd.POLY = function(tokens, startIdx, endIdx)
+	args = getArguments(tokens, startIdx+1, true)
+	if args.len != 2 then return printErr("invalid arguments to POLY")
+	x = args[0]; y = args[1]
+	if not x isa list or not y isa list then return printErr("type mismatch error in POLY")
+	if x.len > y.len then maxi = x.len-1 else maxi = y.len-1
+	if maxi < 0 then return
+	if not requireNum(x[0]) or not requireNum(y[0]) then return
+	xy = []
+	for i in range(0, maxi)
+		xy.push [x[i], y[i]]
+	end for
+	if machine.fill then
+		gfx.fillPoly xy, gfx.color
+	else
+		gfx.drawPoly xy, gfx.color
+	end if
+	machine.plotPos = [x[-1], y[-1]]
 end function
 
 Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
