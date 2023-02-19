@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT GET WAIT SOUND".split +
+  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY PIXEL GET WAIT SOUND".split +
   "NEW LIST CD DIR CAT LOAD RUN".split
 
 // BASIC operators:
@@ -597,6 +597,46 @@ getArguments = function(tokens, startIdx, allowArrayRefs = false)
 	return result
 end function
 
+// A special version of getArguments used for LINE, RECT, and ELLIPSE,
+// where we expect args of the form: x1,y1 TO x2,y2
+// (but allow another comma to replace the TO), or just [TO] x2, y2
+// (and x1,y1 is then fetched from machine.plotPos).
+// Returns null in case of invalid syntax.
+getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false)
+	result = []
+	pos = startIdx
+	eval = Evaluator.make(tokens)
+	eval.allowArrayRefs = allowArrayRefs
+	toPos = null
+	if tokens[startIdx] == "TO" then
+		toPos = 0
+		pos += 1
+	end if
+	while pos < tokens.len
+		if tokens[pos] == ":" then break
+		argEndPos = tokens.indexOfAnyParenSavvy([":",",","TO"], pos-1, tokens.len, tokens.len)
+		if argEndPos < tokens.len and tokens[argEndPos] == "TO" then
+			if toPos != null then return null	// syntax error to have more than one TO
+			toPos = result.len + 1	// remember where we saw the TO
+		end if
+		eval.nextTokIdx = pos
+		eval.endIdx = argEndPos
+		result.push eval.evaluate
+		if argEndPos == tokens.len or tokens[argEndPos] == ":" then break
+		pos = argEndPos + 1
+	end while
+	// validate the syntax
+	if result.len == 2 then
+		if toPos != null and toPos != 0 then return null
+		result = machine.plotPos + result		
+	else if result.len == 4 then
+		if toPos != null and toPos != 2 then return null
+	else
+		return null
+	end if
+	return result
+end function
+
 //======================================================================
 // Functions that use and/or modify the state of the virtual machine.
 // (Includes the Machine class, but also some global helper methods.)
@@ -971,9 +1011,10 @@ Machine.nextDataIdx = 0		// which element of self.data to READ next
 Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 Machine.trace = false		// if on, print line numbers as we execute them
+Machine.fill = false		// whether shape-drawing routines should fill
 
 Machine.resetData = function
-	self.vars = {}
+	self.vars = {"ON":1, "OFF":0, "TRUE":1, "FALSE":0, "PI":pi}
 	self.arrs = {}
 	self.forLoops = []
 	self.nextDataIdx = 0
@@ -986,6 +1027,8 @@ Machine.reset = function
 	self.lineNums = []
 	self.lineIdx = 0
 	self.programPath = ""
+	self.fill = false
+	self.trace = false
 	self.resetData
 end function
 
@@ -1175,10 +1218,32 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
 	end while
 end function
 
+Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
+	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
+	args = getDrawingArgs(tokens, startIdx+1)
+	if args == null then return printErr("syntax error in ELLIPSE")
+	if args.len != 4 then return printErr("invalid arguments to ELLIPSE")
+	x = [args[0], args[2]];	x.sort
+	y = [args[1], args[3]]; y.sort
+	if machine.fill then
+		gfx.fillEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
+	else
+		gfx.drawEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
+	end if	
+end function
+
 Machine.cmd.END = function(tokens, startIdx, endIdx)
 	machine.halt = true
 end function
 Machine.cmd.STOP = @Machine.cmd.END
+
+Machine.cmd.FILL = function(tokens, startIdx, endIdx)
+	if tokens.len < startIdx + 1 then
+		return printErr("incomplete FILL statement")
+	end if
+	mode = evalTokens(tokens[startIdx+1: endIdx])
+	machine.fill = (mode != 0)
+end function
 
 Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
@@ -1382,9 +1447,11 @@ Machine.cmd.LET = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
-	args = getArguments(tokens, startIdx+1)
-	if args.len != 2 then return printErr("invalid arguments to LINE")
-	x = args[0]; y = args[1]
+	if startIdx+1 >= endIdx then return printErr("incomplete LINE statement")
+	args = getDrawingArgs(tokens, startIdx+1)
+	if args == null then return printErr("syntax error in LINE")
+	machine.plotPos = args[:2]
+	x = args[2]; y = args[3]
 	if requireNum(x) and requireNum(y) then
 		gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color
 		machine.plotPos = [x,y]
@@ -1506,6 +1573,20 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 		if varEndPos >= endIdx or tokens[varEndPos] != "," then break
 		pos = varEndPos + 1
 	end while
+end function
+
+Machine.cmd.RECT = function(tokens, startIdx, endIdx)
+	if startIdx+1 >= endIdx then return printErr("incomplete RECT statement")
+	args = getDrawingArgs(tokens, startIdx+1)
+	if args == null then return printErr("syntax error in RECT")
+	if args.len != 4 then return printErr("invalid arguments to RECT")
+	x = [args[0], args[2]];	x.sort
+	y = [args[1], args[3]]; y.sort
+	if machine.fill then
+		gfx.fillRect x[0], y[0], x[1] - x[0], y[1] - y[0]
+	else
+		gfx.drawRect x[0], y[0], x[1] - x[0], y[1] - y[0]
+	end if	
 end function
 
 Machine.cmd.REDIM = function(tokens, startIdx, endIdx)
