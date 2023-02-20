@@ -287,7 +287,7 @@ tokenize = function(line)
 			end if
 			if i+1 >= tokens.len then continue
 			tokj = tokens[i+1]
-			if tokens[i+1] == "(" and isIdentifier(toki) then
+			if tokens[i+1] == "(" and isIdentifier(toki) and not operators.contains(toki) then
 				tokens[i] = toki + "("
 				tokens.remove i+1
 			else if (toki == ">" or toki == "<") and "<>=".contains(tokj) then
@@ -650,6 +650,7 @@ printErr = function(err)
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
+	pprint stackTrace; exit
 end function
 
 getValue = function(identifier)
@@ -980,11 +981,18 @@ Lvar.make = function(tokens, startPos, endPos, dummyArg=false)
 			lvar.index = tokens[startPos+1]
 		else
 			lvar.index = []
-			for indexTokens in tokens[startPos+1:endPos-1].split(",")
-				idx = evalTokens(indexTokens)
+			eval = Evaluator.make(tokens, startPos+1, endPos-1)
+			pos = startPos+1
+			while pos < endPos-1
+				argEndPos = tokens.indexOfAnyParenSavvy([")",","], pos-1, endPos-1, endPos-1)
+				eval.nextTokIdx = pos
+				eval.endIdx = argEndPos
+				idx = eval.evaluate
 				if not idx isa number then return printErr("array index must be a number")
-				lvar.index.push idx
-			end for
+				lvar.index.push idx				
+				if argEndPos == tokens.len or tokens[argEndPos] == ")" then break
+				pos = argEndPos + 1
+			end while
 		end if
 	else
 		if endPos > startPos+1 then return printErr("syntax error")

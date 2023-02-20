@@ -9,6 +9,9 @@
 9 REM  CONVERSION TO MITS BASIC BY STEVE NORTH
 10 DIM B(19,9),M(19,4),S(9),P$(3)
 15 W=0: L=0
+17 REM DOH!  FNR and FNS (below) assume that true expressions evaluate
+18 REM to -1, which was true for some BASICs but not (for example) Apple. :(
+19 REM Also not true in MiniBASIC, because geez, that's just dumb.
 20 DEF FNR(X)=-3*(X=1)-(X=3)-4*(X=6)-6*(X=4)-7*(X=9)-9*(X=7)+FNS(X)
 25 DEF FNS(X)=-X*(X=2 OR X=5 OR X=8)
 30 DEF FNM(Y)=Y-INT(Y/10)*10
