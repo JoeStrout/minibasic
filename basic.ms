@@ -14,7 +14,7 @@ import "mathUtil"
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
   "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
-  "NEW LIST CD DIR CAT LOAD RUN".split
+  "NEW LIST CD PWD DIR CAT LOAD SAVE RUN".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -1013,6 +1013,7 @@ Machine.halt = false		// flag to cause program to stop
 Machine.inThen = false		// true while in a THEN of an if statement
 Machine.trace = false		// if on, print line numbers as we execute them
 Machine.fill = false		// whether shape-drawing routines should fill
+Machine.pen = 1				// line thickness for drawing routines
 
 Machine.resetData = function
 	self.vars = {"ON":1, "OFF":0, "TRUE":1, "FALSE":0, "PI":pi}
@@ -1022,6 +1023,7 @@ Machine.resetData = function
 	self.images = {}
 	self.plotPos = [0,0]
 	self.fill = false
+	self.pen = 1
 	self.images = {}
 	gfx.color = palette[5]
 end function
@@ -1247,7 +1249,7 @@ Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
 	if machine.fill then
 		gfx.fillEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
 	else
-		gfx.drawEllipse x[0], y[0], x[1] - x[0], y[1] - y[0]
+		gfx.drawEllipse x[0], y[0], x[1] - x[0], y[1] - y[0], gfx.color, machine.pen
 	end if
 	machine.plotPos = args[2:]
 end function
@@ -1501,7 +1503,7 @@ Machine.cmd.LINE = function(tokens, startIdx, endIdx)
 	machine.plotPos = args[:2]
 	x = args[2]; y = args[3]
 	if requireNum(x) and requireNum(y) then
-		gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color
+		gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color, machine.pen
 		machine.plotPos = [x,y]
 	end if
 end function
@@ -1559,6 +1561,13 @@ Machine.cmd.ON = function(tokens, startIdx, endIdx)
 	return machine.goTo(targets[targetIndex])
 end function
 
+Machine.cmd.PEN = function(tokens, startIdx, endIdx)
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if args.len != 1 or args[0] < 0 then return printErr("invalid arguments to PEN")
+	if not requireNum(args[0]) then return
+	machine.pen = args[0]
+end function
+	
 Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
 	args = getArguments(tokens, startIdx+1, true)
 	if args.len != 2 then return printErr("invalid arguments to PLOT")
@@ -1567,12 +1576,26 @@ Machine.cmd.PLOT = function(tokens, startIdx, endIdx)
 		if x.len > y.len then maxi = x.len-1 else maxi = y.len-1
 		if maxi < 0 then return
 		if not requireNum(x[0]) or not requireNum(y[0]) then return
-		for i in range(0, maxi)
-			gfx.setPixel x[i], y[i], gfx.color
-		end for
+		if machine.pen > 0.5 and machine.pen < 1.5 then
+			for i in range(0, maxi)
+				gfx.setPixel x[i], y[i], gfx.color
+			end for
+		else
+			w = machine.pen
+			hw = w/2
+			for i in range(0, maxi)
+				gfx.fillEllipse x[i]-hw, y[i]-hw, w, w
+			end for
+		end if
 		machine.plotPos = [x[-1], y[-1]]
 	else if requireNum(x) and requireNum(y) then
-		gfx.setPixel x, y, gfx.color
+		if machine.pen > 0.5 and machine.pen < 1.5 then
+			gfx.setPixel x, y, gfx.color
+		else
+			w = machine.pen
+			hw = w/2
+			gfx.fillEllipse x-hw, y-hw, w, w
+		end if
 		machine.plotPos = [x,y]
 	end if
 end function
@@ -1592,7 +1615,7 @@ Machine.cmd.POLY = function(tokens, startIdx, endIdx)
 	if machine.fill then
 		gfx.fillPoly xy, gfx.color
 	else
-		gfx.drawPoly xy, gfx.color
+		gfx.drawPoly xy, gfx.color, machine.pen
 	end if
 	machine.plotPos = [x[-1], y[-1]]
 end function
@@ -1662,7 +1685,7 @@ Machine.cmd.RECT = function(tokens, startIdx, endIdx)
 	if machine.fill then
 		gfx.fillRect x[0], y[0], x[1] - x[0], y[1] - y[0]
 	else
-		gfx.drawRect x[0], y[0], x[1] - x[0], y[1] - y[0]
+		gfx.drawRect x[0], y[0], x[1] - x[0], y[1] - y[0], gfx.color, machine.pen
 	end if
 	machine.plotPos = args[2:]
 end function

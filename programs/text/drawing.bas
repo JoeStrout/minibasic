@@ -3,7 +3,7 @@
 30 FOR I = 1 TO 6: READ A$: PRINT TAB(10); I; ". "; A$: NEXT
 40 PRINT: PRINT "Select (ESC to quit): ";
 50 GET K: PRINT CHR$(K): IF K = 27 OR K = ASC("0") THEN END
-55 COLOR 3: FILL OFF
+55 COLOR 3: FILL OFF: REM add PEN 6 here o see thicker lines!
 60 K = K - ASC("0"): ON K GOSUB 100, 200, 300, 400, 500, 600
 70 GOTO 10
 
