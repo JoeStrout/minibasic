@@ -21,7 +21,7 @@ See the **[Documentation](DOCUMENTATION.md)** for general notes as well as a com
 
 Included in the _programs/CC_ subdirectory are about a hundred classic (old) BASIC demos and games from _Creative Computing_ magazine (via [BASIC Computer Games](https://en.wikipedia.org/wiki/BASIC_Computer_Games)).  These should all work now; please open an issue if you find any of them broken.
 
-I'm also starting a second collection of programs written specifically for MiniBASIC, or adapted from other sources.  The programs/text subdirectory contains the first of these.  It includes some AppleSoft programs that have been updated to standard MiniBASIC.  (Except for lemonade, which is still being updated.)
+I'm also starting a second collection of programs written specifically for MiniBASIC, or adapted from other sources.  The _programs/demo_ subdirectory contains the first of these.  It includes some AppleSoft programs that have been updated to standard MiniBASIC.  (Except for lemonade, which is still being updated.)
 
 ## Try It Yourself!
 
