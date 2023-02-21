@@ -198,6 +198,40 @@ getRange = function(tokens, startPos=0)
 	return result		
 end function
 
+controlCPressed = function
+	return key.pressed("c") and (key.pressed("left ctrl") or key.pressed("right ctrl"))
+end function
+
+inputOrControlC = function(prompt="")
+	print prompt, ""
+	// flash cursor until control-C pressed, or some other key is available
+	t0 = time
+	cursorOn = false
+	showCursor = char(134) + " " + char(135) + char(8)
+	hideCursor = " " + char(8)
+	while true
+		if controlCPressed then
+			if cursorOn then print hideCursor, ""
+			key.clear
+			return char(3)
+		end if
+		if key.available then
+			if cursorOn then print hideCursor, ""
+			return input
+		end if
+		if time - t0 < 0.8 and not cursorOn then
+			print showCursor, ""
+			cursorOn = true
+		end if
+		if time - t0 >= 0.8 and cursorOn then
+			print hideCursor, ""
+			cursorOn = false
+		end if
+		if time - t0 > 1 then t0 += 1
+		yield
+	end while
+end function
+
 //======================================================================
 // Lexer (i.e. tokenizer)
 //======================================================================
@@ -650,7 +684,7 @@ printErr = function(err)
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
-	pprint stackTrace; exit
+//	pprint stackTrace; exit
 end function
 
 getValue = function(identifier)
@@ -1169,6 +1203,17 @@ Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 // (in alphabetical order below)
 Machine.cmd = {}
 
+Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
+	print
+	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len then
+		print "BREAK at line " + machine.lineNums[machine.lineIdx]
+	else
+		print "BREAK"
+	end if
+	machine.halt = true
+	while controlCPressed; yield; end while
+end function
+
 Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
 	machine.vars = {}
 	machine.arrs = {}
@@ -1463,7 +1508,8 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 
 		varIsNumeric = isNumericId(lvar.id)
 		while not remainingInput
-			remainingInput = input(prompt)
+			remainingInput = inputOrControlC(prompt)
+			if remainingInput == char(3) then return machine.cmd.BREAK
 			if varIsNumeric then remainingInput = remainingInput.trimLeft
 			prompt = "??"
 		end while
@@ -1864,6 +1910,10 @@ Machine.runOneLine = function
 	while self.tokenIdx < tokens.len
 		self.nextLineIdx = null
 		self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
+		if controlCPressed then
+			machine.cmd.BREAK
+			while controlCPressed; yield; end while
+		end if
 		if self.halt then return
 		if self.nextLineIdx != null then break
 	end while
@@ -2019,24 +2069,42 @@ end function
 // Main Program
 //======================================================================
 
-machine.reset
-machine.cmd.HOME
-runUnitTests
+runMainLoop = function
+	env.bootOpts.controlC = false
+	machine.reset
+	machine.cmd.HOME
+	runUnitTests
 
-print "MiniBasic 0.5"
+	print "MiniBasic 0.8"
 
-basic = function
-	reset
-	load "/usr/basic"
-	run
+	basic = function
+		reset
+		load "/usr/basic"
+		run
+	end function
+	_savedGlobals.basic = @basic
+
+	cd "/usr/programs"
+
+	// Main loop (invoking the REPL until done)
+	while true
+		line = inputOrControlC(">")
+		if line == char(3) then
+			print "BREAK"
+			_printMark "(To exit MiniBASIC, type: `exit`)", color.orange
+			while controlCPressed; yield; end while
+			continue
+		end if
+		if line.lower == "exit" then break
+		repl line
+	end while
+	
+	print "Exiting MiniBASIC."
+	print "You are now at the MiniScript (not MiniBASIC!) prompt."
+	_printMark "To return to MiniBASIC, type: `basic`", "#00FF00"
+	_printMark "For other useful commands, type: `help`", "#FFCC00"
+	text.color = color.orange
+	env.bootOpts.controlC = true
 end function
-_savedGlobals.basic = @basic
 
-cd "/usr/programs"
-
-// Main loop (invoking the REPL until done)
-while true
-	line = input(">")
-	if line.lower == "exit" then break
-	repl line
-end while
+if locals == globals then runMainLoop
