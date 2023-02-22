@@ -277,6 +277,7 @@ tokenize = function(line)
 			end while
 			if isData then	// for DATA, continue to next comma or EOL
 				while p1 < lineLen and line[p1] != ","; p1 +=1; end while
+				tok = line[p0:p1]
 			else
 				if p1 < lineLen and line[p1] == "$" then p1 += 1
 				tok = line[p0:p1]
@@ -1024,6 +1025,12 @@ Lvar.isArrayElem = false
 Lvar.id = ""			// identifier, i.e. variable or array name
 Lvar.index = null		// index value, in the case of an array element
 
+Lvar.str = function
+	s = self.id
+	if self.isArrayElem then s += "(" + self.index + ")"
+	return s
+end function
+
 // make an Lvar from the given set of tokens, starting at startPos
 // (which should be the identifier) and going up to endPos (which 
 // should be the first position after the `)` or variable name).
@@ -1538,6 +1545,7 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 			if remainingInput == char(3) then return machine.cmd.BREAK
 			if varIsNumeric then remainingInput = remainingInput.trimLeft
 			prompt = "??"
+			if not varIsNumeric then break  // empty string is OK input for a string
 		end while
 		if varIsNumeric then
 			// numeric var: grab up to the next whitespace or comma
@@ -1619,7 +1627,7 @@ Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.ON = function(tokens, startIdx, endIdx)
-	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx+1, endIdx, endIdx)
+	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx, endIdx, endIdx)
 	if goPos == endIdx then return printErr("Incomplete ON statement")
 	eval = Evaluator.make(tokens, startIdx+1, goPos)
 	targetIndex = floor(eval.evaluate) - 1
@@ -1993,6 +2001,10 @@ Machine.findData = function
 				end if
 				for p in range(pos+1, endPos-1)
 					if line[p] != "," then self.data.push line[p]
+					if line[p] == "DATA" then
+						print "wtf? pushing DATA for token " + p + " of line " + lineNum + ": " + line
+						exit
+					end if
 				end for
 			end if
 			pos = endPos + 1
