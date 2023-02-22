@@ -245,6 +245,7 @@ tokenize = function(line)
 	tokens = []
 	p0 = 0
 	lineLen = line.len
+	isData = false
 	while p0 < lineLen
 		c = line[p0]
 		if isWhitespaceChar(c) then
@@ -255,7 +256,18 @@ tokenize = function(line)
 			while p1 < lineLen and (isNumericChar(line[p1]) or line[p1] == ".")
 				p1 += 1
 			end while
-			tokens.push line[p0:p1].val
+			if isData then	// for DATA, continue to next comma or EOL
+				isNumeric = true
+				while p1 < lineLen and line[p1] != ","
+					if not isWhitespaceChar(line[p1]) then isNumeric=false
+					p1 +=1
+				end while
+				tok = line[p0:p1].trimRight
+				if isNumeric then tok = tok.val
+				tokens.push tok
+			else
+				tokens.push line[p0:p1].val
+			end if
 			p0 = p1
 		else if isIdentifierChar(c) then
 			// lex an identifier or keyword
@@ -263,10 +275,14 @@ tokenize = function(line)
 			while p1 < lineLen and isIdentifierChar(line[p1])
 				p1 += 1
 			end while
-			if p1 < lineLen and line[p1] == "$" then p1 += 1
-			tok = line[p0:p1]
-			upperTok = tok.upper
-			if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
+			if isData then	// for DATA, continue to next comma or EOL
+				while p1 < lineLen and line[p1] != ","; p1 +=1; end while
+			else
+				if p1 < lineLen and line[p1] == "$" then p1 += 1
+				tok = line[p0:p1]
+				upperTok = tok.upper
+				if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
+			end if
 			tokens.push tok
 			p0 = p1
 			if tok == "REM" then
@@ -274,6 +290,11 @@ tokenize = function(line)
 				if p0 < lineLen and line[p0] == " " then p0 += 1
 				if p0 < lineLen then tokens.push line[p0:]
 				p0 = lineLen
+			else if tok == "DATA" then
+				// another special case: after DATA, we do very limited tokenizing,
+				// taking everything between commas as a string (ignoring only 
+				// commas in quotes)
+				isData = true
 			end if
 		else if c == """" then
 			// lex a quoted string literal
@@ -287,7 +308,7 @@ tokenize = function(line)
 			end if
 			tokens.push line[p0:p1+1]
 			p0 = p1+1
-		else if c == "?" then
+		else if c == "?" and not isData then
 			tokens.push "PRINT"
 			p0 += 1
 		else
@@ -884,8 +905,12 @@ end function
 // or may be a command that ONLY works in the repl (i.e. a
 // shell command).
 repl = function(line)
+	if not line then return
 	tokens = tokenize(line)
-	if not tokens then return
+	if not tokens then 
+		print "Error in: " + line
+		return
+	end if
 	if tokens[0] isa number then
 		lineNum = tokens[0]
 		if tokens.len == 1 then
@@ -1724,6 +1749,7 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
 		machine.nextDataIdx += 1
+		if isStringId(lvar.id) and not value isa string then value = str(value)
 		setValue lvar, value
 		if varEndPos >= endIdx or tokens[varEndPos] != "," then break
 		pos = varEndPos + 1
