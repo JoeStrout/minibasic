@@ -13,7 +13,7 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
+  "BREAK CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
   "NEW LIST CD PWD DIR CAT LOAD SAVE RUN".split
 
 // BASIC operators:
@@ -915,7 +915,8 @@ repl = function(line)
 			path = args.join("").trim
 			dir path
 		else if cmd == "CD" then
-			path = args.apply(@stripQuotes).join.trim
+			args.apply(@stripQuotes)
+			path = args.join("").trim
 			cd path
 		else if cmd == "PWD" then
 			print file.curdir
@@ -937,7 +938,7 @@ repl = function(line)
 		else if cmd == "SAVE" then
 			args.apply(@stripQuotes)
 			path = args.join("").trim
-			if not path then path = programPath
+			if not path then path = machine.programPath
 			path = path - ".bas" + ".bas"
 			if not path then
 				print "No path specified; unable to save"
@@ -2077,7 +2078,7 @@ runMainLoop = function
 
 	print "MiniBasic 0.8"
 
-	basic = function
+	globals.basic = function
 		reset
 		load "/usr/basic"
 		run

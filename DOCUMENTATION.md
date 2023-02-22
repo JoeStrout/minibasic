@@ -66,6 +66,7 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 
 | Command | Effect |
 |---------|--------|
+| BREAK | halts the program and reports the line number (for debugging purposes) |
 | CLEAR | clears all variables from memory (but leaves program intact) |
 | CLS | clears the screen (both text and graphics); resets the text cursor to row 1, column 1; and resets the plot point to 0,0; HOME is a synonym |
 | COLOR _x_ | if _x_ is a number, sets text and graphic color to palette color _x_ (0-15); if a _x_ is a string, sets text and graphic color to that HTML color (e.g. "#FF000088" for transparent red) |
