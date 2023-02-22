@@ -2115,6 +2115,7 @@ runMainLoop = function
 
 	// Main loop (invoking the REPL until done)
 	while true
+		if text.column > 0 then print
 		line = inputOrControlC(">")
 		if line == char(3) then
 			print "BREAK"
