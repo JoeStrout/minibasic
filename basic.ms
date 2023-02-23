@@ -934,8 +934,8 @@ repl = function(line)
 			listProgram getRange(args)
 		else if cmd == "LISTREM" then	// why didn't anyone else think of this?
 			listProgram getRange(args), true
-		else if cmd == "RUN" then
-			machine.runProgram
+//		else if cmd == h"RUN" then
+//			machine.runProgram
 		else if cmd == "CAT" or cmd == "CATALOG" or cmd == "DIR" then
 			args.apply(@stripQuotes)
 			path = args.join("").trim
@@ -1756,6 +1756,7 @@ Machine.cmd.READ = function(tokens, startIdx, endIdx)
 
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
+//		print "READ " + machine.nextDataIdx + ": " + lvar.str + " = " + value
 		machine.nextDataIdx += 1
 		if isStringId(lvar.id) and not value isa string then value = str(value)
 		setValue lvar, value
@@ -1818,6 +1819,10 @@ Machine.cmd.RETURN = function(tokens, startIdx, endIdx)
 	returnTo = machine.returnStack.pop
 	machine.nextLineIdx = returnTo.lineIdx
 	return returnTo.tokenIdx
+end function
+
+Machine.cmd.RUN = function(tokens, startIdx, endIdx)
+	machine.runProgram
 end function
 
 Machine.cmd.SOUND = function(tokens, startIdx, endIdx)
