@@ -584,13 +584,14 @@ Evaluator.evaluate = function(customLocals=null)
 			// get an operator...
 			opIdx = operators.indexOf(tok)
 			if self.stack and not isOpenParen(self.stack[-1]) then
-				while self.stack.len >= 3
+				while self.stack.len >= 2
 					// process any higher-precedence operators already on stack
+					prevOp = self.stack[-2]
 					prevOpIdx = -1
-					if self.stack.len > 1 then prevOpIdx = operators.indexOf(self.stack[-2])
+					if self.stack.len > 1 then prevOpIdx = operators.indexOf(prevOp)
 					self.debugPrint "at op " + opIdx + ", considering " + prevOpIdx
 					if opIdx > prevOpIdx then break
-					self.doBinop
+					if prevOp == "NOT" then self.doUnaryOp else self.doBinop
 				end while
 			end if
 			// then push the new operator
