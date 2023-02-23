@@ -1190,6 +1190,13 @@ Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
 	while controlCPressed; yield; end while
 end function
 
+Machine.cmd.CD = function(tokens, startIdx, endIdx)
+	args = tokens[startIdx+1:endIdx]
+	args.apply(@stripQuotes)
+	path = args.join("").trim
+	cd path
+end function
+
 Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
 	machine.vars = {}
 	machine.arrs = {}
