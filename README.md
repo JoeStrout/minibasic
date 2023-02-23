@@ -25,7 +25,9 @@ I'm also starting a second collection of programs written specifically for MiniB
 
 ## Try It Yourself!
 
-To run this code requires at least a preview release of Mini Micro 1.2 (because it uses some of the latest features of the MiniScript language).  So:
+You can **run MiniBASIC on the web** at [itch.io](https://joestrout.itch.io/minibasic).
+
+To run it locally requires at least a preview release of Mini Micro 1.2 (because it uses some of the latest features of the MiniScript language).  So:
 
 1. grab a preview build of Mini Micro 1.2 for [Mac](https://miniscript.org/MiniMicro/preview/minimicro-mac.zip), [Windows](https://miniscript.org/MiniMicro/preview/minimicro-win.zip), or [Linux](https://miniscript.org/MiniMicro/preview/minimicro-linux.tar.gz)
 2. unpack this, and run (you might need to right-click an "open" the first time, as the app is not yet code-signed)
