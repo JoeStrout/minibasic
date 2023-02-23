@@ -14,7 +14,7 @@ import "mathUtil"
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
   "BREAK CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
-  "NEW LIST CD PWD DIR CAT LOAD SAVE RUN".split
+  "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -701,7 +701,8 @@ end function
 
 printErr = function(err)
 	loc = ""
-	if machine.lineIdx >= 0 and machine.lineNums.hasIndex(machine.lineIdx) then
+	if machine.lineIdx >= 0 and machine.lineNums.hasIndex(machine.lineIdx) and
+			machine.lineNums[machine.lineIdx] >= 0 then
 		loc = " in line " + machine.lineNums[machine.lineIdx]
 	end if
 	print char(7) + "Error: " + err + loc
@@ -893,6 +894,7 @@ listProgram = function(lineRange, remarksOnly = false)
 	machine.sortLines
 	machine.findComeFroms
 	for lineNum in machine.lineNums
+		if lineNum < 0 then continue
 		if lineRange.from != null and lineNum < lineRange.from then continue
 		if lineRange.to != null and lineNum > lineRange.to then continue
 		tokens = machine.program[lineNum]
@@ -922,71 +924,12 @@ repl = function(line)
 		end if
 		return
 	end if
-	pos = 0
-	while pos < tokens.len
-		endPos = tokens.indexOfAnyParenSavvy([":"], pos, tokens.len, tokens.len)
-		cmd = tokens[pos]
-		if cmd isa string then cmd = cmd.upper
-		args = tokens[pos+1:endPos]
-		if cmd == "NEW" then
-			machine.reset
-		else if cmd == "LIST" then
-			listProgram getRange(args)
-		else if cmd == "LISTREM" then	// why didn't anyone else think of this?
-			listProgram getRange(args), true
-//		else if cmd == h"RUN" then
-//			machine.runProgram
-		else if cmd == "CAT" or cmd == "CATALOG" or cmd == "DIR" then
-			args.apply(@stripQuotes)
-			path = args.join("").trim
-			dir path
-		else if cmd == "CD" then
-			args.apply(@stripQuotes)
-			path = args.join("").trim
-			cd path
-		else if cmd == "PWD" then
-			print file.curdir
-		else if cmd == "LOAD" then
-			args.apply(@stripQuotes)
-			path = args.join("").trim
-			path = path - ".bas" + ".bas"
-			lines = file.readLines(path)
-			if lines == null then
-				print "Unable to read program " + path
-			else
-				machine.reset
-				for line in lines
-					repl line
-				end for
-				print machine.program.len + " lines loaded from " + path
-				machine.programPath = path	// ToDo: get full path
-			end if
-		else if cmd == "SAVE" then
-			args.apply(@stripQuotes)
-			path = args.join("").trim
-			if not path then path = machine.programPath
-			path = path - ".bas" + ".bas"
-			if not path then
-				print "No path specified; unable to save"
-			else
-				pgm = []
-				for lineNum in machine.program.sortedIndexes
-					pgm.push getLineAsText(lineNum, machine.program[lineNum])
-				end for
-				err = file.writeLines(path, pgm)
-				if err then
-					print err
-					globals.wtf = pgm
-				else
-					print pgm.len + " lines saved to " + path
-					machine.programPath = path	// ToDo: get full path
-				end if
-			end if
-		else
-			machine.doImmediate tokens[pos:endPos]
-		end if
-		pos = endPos + 1
-	end while
+	
+	// for immediate mode, store it as "line number" -2,
+	// and then run just that (without clearing data).
+	machine.program[-2] = tokens
+	machine.program[-1] = ["END"]
+	machine.runProgram -2, false
 end function
 
 // ForLoopState: represents the state of one active FOR loop,
@@ -1325,6 +1268,15 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
 	end while
 end function
 
+Machine.cmd.DIR = function(tokens, startIdx, endIdx, redim=false)
+	args = tokens[startIdx+1:endIdx]
+	args.apply(@stripQuotes)
+	path = args.join("").trim
+	dir path
+end function
+Machine.cmd.CAT = @Machine.cmd.DIR
+Machine.cmd.CATALOG = @Machine.cmd.DIR
+
 Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
 	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
 	args = getDrawingArgs(tokens, startIdx+1)
@@ -1570,6 +1522,24 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 	end while
 end function
 
+Machine.cmd.LOAD = function(tokens, startIdx, endIdx)
+	args = tokens[startIdx+1:endIdx]
+	args.apply(@stripQuotes)
+	path = args.join("").trim
+	path = path - ".bas" + ".bas"
+	lines = file.readLines(path)
+	if lines == null then
+		print "Unable to read program " + path
+	else
+		machine.reset
+		for line in lines
+			repl line
+		end for
+		print machine.program.len + " lines loaded from " + path
+		machine.programPath = path	// ToDo: get full path
+	end if
+end function
+
 Machine.cmd.LET = function(tokens, startIdx, endIdx)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
 	varEndPos = startIdx + 1
@@ -1594,6 +1564,14 @@ Machine.cmd.LINE = function(tokens, startIdx, endIdx)
 		gfx.line machine.plotPos[0], machine.plotPos[1], x, y, gfx.color, machine.pen
 		machine.plotPos = [x,y]
 	end if
+end function
+
+Machine.cmd.LIST = function(tokens, startIdx, endIdx)
+	listProgram getRange(tokens[startIdx+1:endIdx])
+end function
+
+Machine.cmd.LISTREM = function(tokens, startIdx, endIdx)
+	listProgram getRange(tokens[startIdx+1:endIdx]), true
 end function
 
 Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
@@ -1624,6 +1602,11 @@ Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
 		machine.nextLineIdx = fls.topLineIdx
 		return fls.topTokenIdx
 	end for
+end function
+
+Machine.cmd.NEW = function(tokens, startIdx, endIdx)
+	if endIdx > startIdx+1 then return printErr("syntax error in NEW command")
+	machine.reset
 end function
 
 Machine.cmd.ON = function(tokens, startIdx, endIdx)
@@ -1743,6 +1726,10 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	if needEOL then print
 end function
 
+Machine.cmd.PWD = function(tokens, startIdx, endIdx)
+	print file.curdir
+end function
+
 Machine.cmd.READ = function(tokens, startIdx, endIdx)
 	pos = startIdx + 1
 	while pos < endIdx
@@ -1823,6 +1810,29 @@ end function
 
 Machine.cmd.RUN = function(tokens, startIdx, endIdx)
 	machine.runProgram
+end function
+
+Machine.cmd.SAVE = function(tokens, startIdx, endIdx)
+	args = tokens[startIdx+1:endIdx]
+	args.apply(@stripQuotes)
+	path = args.join("").trim
+	if not path then path = machine.programPath
+	path = path - ".bas" + ".bas"
+	if not path then
+		print "No path specified; unable to save"
+	else
+		pgm = []
+		for lineNum in machine.program.sortedIndexes
+			pgm.push getLineAsText(lineNum, machine.program[lineNum])
+		end for
+		err = file.writeLines(path, pgm)
+		if err then
+			print err
+		else
+			print pgm.len + " lines saved to " + path
+			machine.programPath = path	// ToDo: get full path
+		end if
+	end if
 end function
 
 Machine.cmd.SOUND = function(tokens, startIdx, endIdx)
@@ -1970,14 +1980,18 @@ Machine.runOneLine = function
 	end if
 end function
 
-Machine.runProgram = function
-	self.resetData
+Machine.runProgram = function(startLineNum=0, clearData=true)
+	if clearData then self.resetData
 	self.sortLines
-	self.findData
+	if clearData then self.findData
 	self.halt = false
 	self.inThen = false
 	self.lineIdx = 0
 	self.tokenIdx = 0
+	if not self.lineNums then return
+	while self.lineIdx < self.lineNums.len and self.lineNums[self.lineIdx] < startLineNum
+		self.lineIdx += 1
+	end while
 	while not self.halt and self.lineIdx < self.lineNums.len
 		self.runOneLine
 	end while
@@ -2119,7 +2133,7 @@ runMainLoop = function
 	machine.cmd.HOME
 	runUnitTests
 
-	print "MiniBasic 0.8"
+	print "MiniBasic 0.9"
 
 	globals.basic = function
 		reset
