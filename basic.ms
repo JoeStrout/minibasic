@@ -14,7 +14,7 @@ import "mathUtil"
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
   "BREAK CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
-  "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN".split
+  "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -1783,6 +1783,86 @@ Machine.cmd.REM = function(tokens, startIdx, endIdx)
 	// no action needed!
 end function
 
+Machine.cmd.RENUMBER = function(tokens, startIdx, endIdx)
+	toPos = tokens.indexOf("TO")
+	if toPos == null or toPos >= endIdx-1 then return printErr("incomplete RENUMBER command")
+	destStart = tokens[toPos+1]
+	if not destStart isa number then return printErr("type mismatch error in RENUMBER command")
+	destEnd = destStart
+
+	step = 10
+	stepPos = tokens.indexOf("STEP", toPos)
+	if stepPos >= endIdx-1 then return printErr("incomplete RENUMBER command")
+	if stepPos != null then step = tokens[stepPos+1]
+	if not step isa number then return printErr("type mismatch error in RENUMBER command")
+	if step < 1 then return printErr("invalid STEP in RENUMBER command")
+	
+	machine.sortLines
+	if not machine.lineNums then; print "Program empty."; return; end if
+	
+	startRange = getRange(tokens[startIdx+1:toPos])
+	if startRange.from == null then startRange.from = 0
+	if startRange.to == null then startRange.to = machine.lineNums[-1]
+
+	// start by finding our source lines and building a map to new lines
+	remap = {}	// key: old line number; value: new line number
+	newPgm = {}	// key: new line number; value: tokens for that line
+	destLineNum = destStart
+	for lineNum in machine.lineNums
+		if lineNum < 0 or lineNum < startRange.from then continue
+		if lineNum > startRange.to then break
+		remap[lineNum] = destLineNum
+		newPgm[destLineNum] = machine.program[lineNum]
+		print lineNum + " --> " + destLineNum
+		destEnd = destLineNum
+		destLineNum += step
+	end for
+	
+	// next, ensure that the destination area does not overlap any existing lines
+	for lineNum in machine.lineNums
+		if remap.hasIndex(lineNum) then continue
+		if lineNum >= destStart and lineNum <= destEnd then
+			print "Remapped lines would overlap existing line " + lineNum + ";"
+			print "operation canceled."
+			return
+		end if
+	end for
+	
+	// remove the old lines, and add the new ones to the program
+	for lineNum in remap.indexes
+		machine.program.remove(lineNum)
+	end for
+	machine.program += newPgm
+	
+	// and then, update all references (GOTO, GOSUB, RESTORE, THEN)
+	for kv in machine.program
+		lineNum = kv.key
+		line = kv.value
+		for i in range(0, line.len-2)
+			if line[i] == "GOTO" or line[i] == "GOSUB" then
+				for j in range(i+1, line.len-1)
+					target = line[j]
+					if target == ":" then break
+					if target isa number and remap.hasIndex(target) then 
+						line[j] = remap[target]
+					end if
+				end for
+			else if i+1 < line.len and (line[i] == "THEN" or line[i] == "RESTORE") then
+				target = line[i+1]
+				if target isa number and remap.hasIndex(target) then
+					line[i+1] = remap[target]
+				end if
+			end if
+		end for
+	end for
+	
+	print "Renumbered " + remap.len + " line" + "s"*(remap.len!=1) + 
+	  " to " + destStart + "-" + destEnd
+	
+	machine.sortLines
+	machine.findComeFroms
+end function
+
 Machine.cmd.RESTORE = function(tokens, startIdx, endIdx)
 	args = getArguments(tokens, startIdx+1)
 	if not args then
@@ -2045,13 +2125,13 @@ Machine.findComeFroms = function
 		lineNum = kv.key
 		line = kv.value
 		for i in range(0, line.len-2)
-			if line[i] == "GOTO" then
+			if line[i] == "GOTO" or line[i] == "GOSUB" then
 				for j in range(i+1, line.len-1)
 					target = line[j]
 					if target == ":" then break
 					if target isa number then self.comeFrom[target] = self.comeFrom.get(target, []) + [lineNum]
 				end for
-			else if line[i] == "GOSUB" or line[i] == "THEN" then
+			else if i+1 < line.len and line[i] == "THEN" then
 				target = line[i+1]
 				if not target isa number then continue
 				self.comeFrom[target] = self.comeFrom.get(target, []) + [lineNum]
@@ -2141,7 +2221,7 @@ runMainLoop = function
 	machine.cmd.HOME
 	runUnitTests
 
-	print "MiniBasic 0.9"
+	print "MiniBasic 0.9.1"
 
 	globals.basic = function
 		reset

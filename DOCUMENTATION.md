@@ -118,5 +118,6 @@ At the `>` interactive prompt, you may type and execute BASIC code immediately; 
 | LOAD _path_ | load the BASIC program at _path_ relative to the current directory (`.bas` extension may be omitted) |
 | NEW | clear the current program and all variables |
 | PWD | print working directory (i.e., path to the current directory |
+| RENUMBER _from_ - _to_ TO _newStart_ \[STEP _step_\] | renumber lines in the range _from_ to _to_, so that they now start at _newStart_ and increment by _step_ |
 | RUN | reset DATA pointers and all variables, then run the current program from the beginning |
 | SAVE \[_path_\] | save the current program to _path_ relative to the current directory (`.bas` extension may be omitted); if _path_ is omitted, saves to the previous program path, if any |
