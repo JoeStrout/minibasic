@@ -283,7 +283,8 @@ tokenize = function(line)
 				if p1 < lineLen and (line[p1] == "$" or line[p1] == "#") then p1 += 1
 				tok = line[p0:p1]
 				upperTok = tok.upper
-				if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
+				if keywords.contains(upperTok) or operators.contains(upperTok) or
+				  machine.fn.hasIndex(upperTok) then tok = upperTok
 			end if
 			tokens.push tok
 			p0 = p1
@@ -2006,6 +2007,7 @@ Machine.cmd.SAVE = function(tokens, startIdx, endIdx)
 	else
 		pgm = []
 		for lineNum in machine.program.sortedIndexes
+			if lineNum < 0 then continue
 			pgm.push getLineAsText(lineNum, machine.program[lineNum])
 		end for
 		err = file.writeLines(path, pgm)
@@ -2316,7 +2318,7 @@ runMainLoop = function
 	machine.cmd.HOME
 	runUnitTests
 
-	print "MiniBasic 0.9.1"
+	print "MiniBasic 0.9.2"
 
 	globals.basic = function
 		reset
