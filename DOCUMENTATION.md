@@ -115,6 +115,7 @@ At the `>` interactive prompt, you may type and execute BASIC code immediately; 
 | CAT\[ALOG\] | list contents of the current directory; synonym for DIR |
 | CD _path_ | change the current directory to the given _path_.  Path separators are `/`; use `..` to go up a level |
 | DIR | list contents of the current directory; CAT and CATALOG are synonyms |
+| EDIT _lineNum_ | put cursor at end of line _lineNum_ so you can edit it |
 | LIST \[_from_ - _to_\] | list the current program, or some range of line numbers; _from_ or _to_ may be omitted to list from the beginning or to the end of the program, respectively |
 | LISTREM \[_from_ - _to_\] | similar to LIST, but shows only lines that begin with REM |
 | LOAD _path_ | load the BASIC program at _path_ relative to the current directory (`.bas` extension may be omitted) |
@@ -124,6 +125,7 @@ At the `>` interactive prompt, you may type and execute BASIC code immediately; 
 | RUN | reset DATA pointers and all variables, then run the current program from the beginning |
 | SAVE \[_path_\] | save the current program to _path_ relative to the current directory (`.bas` extension may be omitted); if _path_ is omitted, saves to the previous program path, if any |
 
+Note that at any input prompt, you can use **Control-A/Control-E** to jump to the beginning/end of the line, and hold **Alt** (or Option on Mac) to move or delete by whole words.
 
 ## Special Topics
 

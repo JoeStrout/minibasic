@@ -15,7 +15,7 @@ keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM 
   "GOSUB RETURN DATA READ RESTORE".split +
   "BREAK CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
   "COLOR LINE PLOT FILL RECT ELLIPSE POLY IMAGE PEN ".split +
-  "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER".split
+  "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER EDIT".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -1330,6 +1330,22 @@ Machine.cmd.CLOSE = function(tokens, startIdx, endIdx)
 	if machine.files.hasIndex(fileId) then
 		machine.files[fileId].close
 		machine.files.remove fileId
+	end if
+end function
+
+Machine.cmd.EDIT = function(tokens, startIdx, endIdx)
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if not args then return printErr("line number required for EDIT")
+	if args.len != 1 or not args[0] isa number then return printErr("invalid arguments to EDIT")
+	lineNum = args[0]
+	if not machine.program.hasIndex(lineNum) then return printErr("invalid line number")
+	lineText = getLineAsText(lineNum, machine.program[lineNum])
+	if not key.hasIndex("put") then
+		return printErr("feature not available (newer version of Mini Micro required)")
+	else
+		key.put lineText
+		line = inputOrControlC(">")
+		if line == char(3) then machine.cmd.BREAK else repl line
 	end if
 end function
 
