@@ -11,8 +11,7 @@ This is a little project to create an interpreter for the BASIC programming lang
 MiniBASIC is nearly complete.  The full standard BASIC language has been implemented, plus a few nice additions like PLOT, LINE, RECT, ELLIPSE, POLY, and SOUND.  For interactive editing, it supports the standard functions plus niceties like LISTREM and RENUMBER.
 
 Features still planned:
-  - file I/O
-  - better error trapping, e.g., using `;` between statements rather than `:`
+  - better error trapping, e.g., using `;` between statements rather than `:`, or use of `==` instead of `=`
 
 See the **[Documentation](DOCUMENTATION.md)** for general notes as well as a complete reference of all available functions and commands.
 
