@@ -68,6 +68,7 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 |---------|--------|
 | BREAK | halts the program and reports the line number (for debugging purposes) |
 | CLEAR | clears all variables from memory (but leaves program intact) |
+| CLOSE _fileNum_ | closes a file previously opened with OPEN |
 | CLS | clears the screen (both text and graphics); resets the text cursor to row 1, column 1; and resets the plot point to 0,0; HOME is a synonym |
 | COLOR _x_ | if _x_ is a number, sets text and graphic color to palette color _x_ (0-15); if a _x_ is a string, sets text and graphic color to that HTML color (e.g. "#FF000088" for transparent red) |
 | DATA _list_ | defines a comma-separated list of data for use with READ and RESTORE.  Data elements may be strings or numbers; strings must be enclosed in quotes if they contain spaces or punctuation |
@@ -89,6 +90,7 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | LINE \[_x1_, _y1_ TO\] _x2_, _y2_ | draws a line from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | NEXT \[_var_ \[, _var2_ ...\]\] | increments the nearest or specified FOR loop variable and jumps to the top of the loop, unless that loop is complete, in which case it advances to the next specified variable or the next statement |
 | ON _expr_ GOTO _lineNum1_, _lineNum2_, ... | jumps to the line number corresponding to the (floored) value of _expr_, starting at 1 for _lineNum1_, etc.  If _expr_ evaluates to less than 1 or more than the number of line numbers given, control proceeds to the next statement |
+| OPEN _fileNum_, \[_mode_,\] _path_ | opens a disk file for reading/writing.  _mode_ may be a number: 0 to read, or 1 to write; or it may be a standard [mode string](https://miniscript.org/wiki/File.open). _fileNum_ must be a nonzero number that's not already in use. See the File I/O section at bottom for more detail |
 | PEN _size_ | changes the pen sized used with PLOT and LINE, as well as RECT, ELLIPSE, and POLY when FILL is OFF; value must be >= 0 |
 | PLOT _x_, _y_ | plots pixel _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and sets the plot position used with subsequent drawing; may also take arrays to plot multiple points |
 | POLY _x()_, _y()_ | draws or fills a polygon defined by arrays _x()_ and _y()_, updating the plot position to the last point in the arrays |
@@ -121,3 +123,33 @@ At the `>` interactive prompt, you may type and execute BASIC code immediately; 
 | RENUMBER _from_ - _to_ TO _newStart_ \[STEP _step_\] | renumber lines in the range _from_ to _to_, so that they now start at _newStart_ and increment by _step_ |
 | RUN | reset DATA pointers and all variables, then run the current program from the beginning |
 | SAVE \[_path_\] | save the current program to _path_ relative to the current directory (`.bas` extension may be omitted); if _path_ is omitted, saves to the previous program path, if any |
+
+
+## Special Topics
+
+### Graphics
+
+MiniBASIC features a high-resolution, 960x640 pixel full-color graphics display layer under the text layer.
+
+Please see the program **demo/drawing** for examples of how to use the drawing commands (PLOT, LINE, RECT, ELLIPSE, POLY, and IMAGE).
+
+### Sound
+
+MiniBASIC supports a sophisticated synthesized sound system, including four different waveforms, and the ability to interpolate pitch and/or volume over the course of a sound.  All sounds are played asynchronously.
+
+Please see the program **demo/sounds** for examples showing use of the SOUND command.
+
+### File I/O
+
+To write data to disk, follow these steps:
+
+1. Open the file with a command like `OPEN n, 1, "path/to/file.txt"`.  _n_ here is any nonzero number that is not already in use for some other open file.  The second parameter, 1, is equivalent to "w" and means to clear the file (if it exists) and prepare it for writing.  You may also specify `"a"` to append to the end of a file, or some other mode listed [here](https://miniscript.org/wiki/File.open).
+2. Write to the file with `PRINT# n, "some data"`.  This version of the `PRINT` command uses all the same syntax and rules as normal `PRINT`, but its output is directed to file _n_ instead of to the screen.
+3. Close the file with `CLOSE n`.
+
+To read data from disk, follow these steps:
+
+1. Open the file with a command like `OPEN n, 0, "path/to/file.txt"`.  Again, _n_ is any nonzero number that is not already in use for some other open file.  The second parameter, 0, means to open the file in "r" (read) mode; you may also use other modes listed [here](https://miniscript.org/wiki/File.open).
+2. Read from the file with a command like `INPUT# n, A$`.  This `INPUT#` command is just like the standard `INPUT` command, except that any prompt string is ignored, and input is read from the file rather than from the console.  Note that both end-of-file and a blank line will store "" in the given string variable.  OR,
+3. Read a single character from the file with a command like `GET# n, A$`.  If we are at end-of-file, then GET# stores empty string into the given string variable.  If given a numeric variable, then at the end of file the value stored is -1.
+4. Close the file with `CLOSE n`.

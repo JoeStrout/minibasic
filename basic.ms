@@ -13,7 +13,8 @@ import "mathUtil"
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
   "GOSUB RETURN DATA READ RESTORE".split +
-  "BREAK CLS HOME HTAB VTAB COLOR LINE PLOT FILL OFF RECT ELLIPSE POLY IMAGE PEN GET WAIT SOUND".split +
+  "BREAK CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
+  "COLOR LINE PLOT FILL RECT ELLIPSE POLY IMAGE PEN ".split +
   "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER".split
 
 // BASIC operators:
@@ -279,7 +280,7 @@ tokenize = function(line)
 				while p1 < lineLen and line[p1] != ","; p1 +=1; end while
 				tok = line[p0:p1]
 			else
-				if p1 < lineLen and line[p1] == "$" then p1 += 1
+				if p1 < lineLen and (line[p1] == "$" or line[p1] == "#") then p1 += 1
 				tok = line[p0:p1]
 				upperTok = tok.upper
 				if keywords.contains(upperTok) or operators.contains(upperTok) then tok = upperTok
@@ -695,6 +696,34 @@ getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false, assumeFrom =
 	return result
 end function
 
+// Helper function to find the file handle for a PRINT#, INPUT#, or GET# command.
+// Look for a "#" at the end of the token at startIdx.  If not found, return [null,startIdx+1].
+// If found, return the file ID and the new startIdx after the ID token(s) as
+// [file, newStart].  In case of error, print error and return null.
+getFile = function(tokens, startIdx)
+	if startIdx >= tokens.len or tokens[startIdx][-1] != "#" then return [null, startIdx+1]
+	if startIdx+1 == tokens.len then return printErr("syntax error")
+	tok = tokens[startIdx+1]
+	result = null
+	if tok isa number then
+		result = [tok, startIdx+2]
+	else if isOpenParen(tok) then
+		closePos = tokens.findCloseParen(startIdx+2)
+		if closePos == null then return printErr("unbalanced parentheses")
+		fileId = evalTokens(tokens[startIdx+2:closePos])
+		if not fileId isa number then return printErr("file ID must be numeric")
+		result = [fileId, closePos+1]
+	else if isIdentifier(tok) then
+		fileId = getValue(tok)
+		if not fileId isa number then return printErr("file ID must be numeric")
+		result = [fileId, startIdx+2]		
+	end if
+	if result == null or not machine.files.hasIndex(result[0]) then return printErr("invalid file ID")
+	result[0] = machine.files[result[0]]
+	if result[1] < tokens.len and tokens[result[1]] == "," then result[1] += 1
+	return result
+end function
+
 //======================================================================
 // Functions that use and/or modify the state of the virtual machine.
 // (Includes the Machine class, but also some global helper methods.)
@@ -1033,6 +1062,7 @@ Machine.inThen = false		// true while in a THEN of an if statement
 Machine.trace = false		// if on, print line numbers as we execute them
 Machine.fill = false		// whether shape-drawing routines should fill
 Machine.pen = 1				// line thickness for drawing routines
+Machine.files = {}			// open files
 
 Machine.resetData = function
 	self.vars = {"ON":1, "OFF":0, "TRUE":1, "FALSE":0, "PI":pi}
@@ -1045,6 +1075,10 @@ Machine.resetData = function
 	self.pen = 1
 	self.images = {}
 	gfx.color = palette[5]
+	for fileHandle in self.files.values
+		fileHandle.close
+	end for
+	self.files = {}
 end function
 
 Machine.reset = function
@@ -1182,7 +1216,8 @@ Machine.cmd = {}
 
 Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
 	print
-	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len then
+	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len and
+			machine.lineNums[machine.lineIdx] >= 0 then
 		print "BREAK at line " + machine.lineNums[machine.lineIdx]
 	else
 		print "BREAK"
@@ -1285,6 +1320,18 @@ end function
 Machine.cmd.CAT = @Machine.cmd.DIR
 Machine.cmd.CATALOG = @Machine.cmd.DIR
 
+Machine.cmd.CLOSE = function(tokens, startIdx, endIdx)
+	if startIdx+1 >= endIdx then return printErr("incomplete CLOSE statement")
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if args == null or args.len != 1 then return printErr("invalid arguments to CLOSE")
+	fileId = args[0]
+	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in CLOSE")
+	if machine.files.hasIndex(fileId) then
+		machine.files[fileId].close
+		machine.files.remove fileId
+	end if
+end function
+
 Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
 	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
 	args = getDrawingArgs(tokens, startIdx+1)
@@ -1340,12 +1387,26 @@ Machine.cmd.FOR = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.GET = function(tokens, startIdx, endIdx)
-	lvar = Lvar.make(tokens, startIdx + 1, endIdx)
+	fileAndPos = getFile(tokens, startIdx)
+	if fileAndPos == null then return
+	f = fileAndPos[0]; pos = fileAndPos[1]
+	
+	lvar = Lvar.make(tokens, pos, endIdx)
 	if lvar == null then return printErr("incomplete GET statement")
-	k = key.get
-	if isNumericId(lvar.id) then k = k.code
+	if f then
+		k = f.read(1)
+		if k == null then
+			if isNumericId(lvar.id) then k = -1 else k = ""
+		else
+			if isNumericId(lvar.id) then k = k.code
+		end if
+	else
+		k = key.get
+		if isNumericId(lvar.id) then k = k.code
+	end if
 	setValue lvar, k
 end function
+Machine.cmd["GET#"] = @Machine.cmd.GET
 
 Machine.cmd.GOSUB = function(tokens, startIdx, endIdx)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
@@ -1475,8 +1536,10 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 	//		- when inputting a string, stops at comma UNLESS it is the last
 	//		  variable in the input list, in which case it continues to EOL 
 	
-	pos = startIdx + 1
-
+	fileAndPos = getFile(tokens, startIdx)
+	if fileAndPos == null then return
+	f = fileAndPos[0]; pos = fileAndPos[1]
+	
 	// Start by finding the prompt
 	if pos < endIdx and isStringLiteral(tokens[pos]) then
 		prompt = stripQuotes(tokens[pos])
@@ -1501,7 +1564,7 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 
 		varIsNumeric = isNumericId(lvar.id)
 		while not remainingInput
-			remainingInput = inputOrControlC(prompt)
+			if f then remainingInput = f.readLine else remainingInput = inputOrControlC(prompt)
 			if remainingInput == char(3) then return machine.cmd.BREAK
 			if varIsNumeric then remainingInput = remainingInput.trimLeft
 			prompt = "??"
@@ -1529,6 +1592,7 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 		pos = varEndPos + 1
 	end while
 end function
+Machine.cmd["INPUT#"] = @Machine.cmd.INPUT
 
 Machine.cmd.LOAD = function(tokens, startIdx, endIdx)
 	args = tokens[startIdx+1:endIdx]
@@ -1640,6 +1704,28 @@ Machine.cmd.ON = function(tokens, startIdx, endIdx)
 	return machine.goTo(targets[targetIndex])
 end function
 
+Machine.cmd.OPEN = function(tokens, startIdx, endIdx)
+	// syntax: OPEN fileId, [mode,] path
+	//	fileId: a unique nonzero number to identify the open file
+	//	mode: a file mode string like "r" or "a+", or a number: 0="r", 1="w"
+	// Note that we do NOT have or support the "device number" second
+	// parameter which you may see in C64 BASIC2 programs.  Just leave it out.
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if args.len < 2 then return printErr("incomplete OPEN command")
+	if args.len > 3 then return printErr("too many arguments to OPEN")
+	fileId = args[0]
+	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in OPEN")
+	if args.len == 3 then mode = args[1] else mode = "r"
+	if mode isa number then
+		if mode == 0 then mode = "r" else mode = "w"
+	end if
+	path = args[-1]
+	if machine.files.hasIndex(fileId) then return printErr("file " + fileId + " already open")
+	f = file.open(path, mode)
+	if f isa string then return printErr(f)
+	machine.files[fileId] = f
+end function
+
 Machine.cmd.PEN = function(tokens, startIdx, endIdx)
 	args = getArguments(tokens, startIdx+1, endIdx)
 	if args.len != 1 or args[0] < 0 then return printErr("invalid arguments to PEN")
@@ -1702,9 +1788,13 @@ end function
 Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	// print a series of expressions, separated by , or ;
 //	print "Printing " + tokens + " " + startIdx+":"+endIdx
-	pos = startIdx + 1
+	fileAndPos = getFile(tokens, startIdx)
+	if fileAndPos == null then return
+	f = fileAndPos[0]; pos = fileAndPos[1]
+	
 	needEOL = true
 	eval = Evaluator.make(tokens, startIdx, endIdx)
+	
 	while eval.nextTokIdx < endIdx
 		// Grab complete expressions even if they aren't separated
 		// by any delimiters.  This is weird, but something old BASICS did,
@@ -1717,10 +1807,12 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		value = eval.evaluate
 //		print "Tokens " + pos + ":" + endPos + " evaluates to " + value
 		if value == null then return
-		print value, ""
+		if f then f.write value else print value, ""
 		if eval.nextTokIdx < endIdx then
 			nextTok = tokens[eval.nextTokIdx]
-			if nextTok == "," then print " ", ""
+			if nextTok == "," then
+				 if f then f.write " " else print " ", ""
+			end if
 			if nextTok == "," or nextTok == ";" then eval.nextTokIdx += 1
 			needEOL = false
 		else if tokens[pos] == "TAB(" then
@@ -1731,8 +1823,11 @@ Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 		end if
 		pos = eval.nextTokIdx
 	end while
-	if needEOL then print
+	if needEOL then
+		if f then f.writeLine "" else print
+	end if
 end function
+Machine.cmd["PRINT#"] = @Machine.cmd.PRINT
 
 Machine.cmd.PWD = function(tokens, startIdx, endIdx)
 	print file.curdir
