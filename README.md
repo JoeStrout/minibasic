@@ -1,5 +1,5 @@
 # MiniBASIC
-[BASIC](https://en.wikipedia.org/wiki/BASIC) interpreter for [Mini Micro](https:miniscript.org/MiniMicro/)
+[BASIC](https://en.wikipedia.org/wiki/BASIC) interpreter for [Mini Micro](https://miniscript.org/MiniMicro/)
 
 
 This is a little project to create an interpreter for the BASIC programming language for Mini Micro.  The interpreter itself is written in [MiniScript](https://miniscript.org).
