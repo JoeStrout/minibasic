@@ -1,0 +1,10 @@
+Feb 26, 2023: v0.9.2
+====================
+First public release.
+
+
+not yet released: v0.9.3
+====================
++ Fixed bug causing REM to be case-sensitive.
+
+

@@ -12,7 +12,7 @@ import "mathUtil"
 // Keywords, including all BASIC commands (but not including functions,
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
-  "GOSUB RETURN DATA READ RESTORE".split +
+  "GOSUB RETURN DATA READ RESTORE REM".split +
   "BREAK CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
   "COLOR LINE PLOT FILL RECT ELLIPSE POLY IMAGE PEN ".split +
   "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER EDIT".split
@@ -2334,7 +2334,7 @@ runMainLoop = function
 	machine.cmd.HOME
 	runUnitTests
 
-	print "MiniBasic 0.9.2"
+	print "MiniBasic 0.9.3"
 
 	globals.basic = function
 		reset

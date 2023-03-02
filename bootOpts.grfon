@@ -1,0 +1,44 @@
+// Machine options (read when Mini Micro boots, before disks are loaded).
+
+// Ignore prefs, and always mount user.minidisk next to the app
+ignorePrefs: true
+
+// Whether to play the startup chime when the machine boots.
+startupChime: true
+
+// Whether to show the welcome text (including a handy tip!) on boot.
+welcome: false
+
+// Whether to allow a "cmd=" query parameter (web builds only).
+queryCmd: false
+
+// Whether to allow control-C to interrupt a running program.  CAUTION:
+// if you set this to false, and your program enters an infinite loop,
+// then your only recourse will be to restart Mini Micro.
+controlC: true
+
+// Whether to show the disk slots in the bezel below the screen.
+// NOTE: this is ignored in web builds (where disk slots are never shown).
+diskSlots: true
+
+// Whether to show the "Mini Micro" sticker in the lower-right corner of the bezel.
+logoSticker: true
+
+// Whether to have a bezel at all.  Note that if you set this to false, then
+// you will get no disk slots or logo sticker regardless of the settings above.
+hasBezel: true
+
+// What image to use for the bezel.  This can be the name of one of the
+// built-in bezels ("3DBezel.png" or "FlatBezel.png"), or the name of a
+// PNG file located in the Streaming Assets folder next to this file.
+//bezelImage: ScratchedBezel.png
+
+// Tint color for the bezel.  Specify in HTML color format (same as Mini Micro
+// color literals): #RRGGBB, where RR, GG, and BB are hex values from 00 to FF.
+// Leave unspecified to get the standard Mini Micro beige bevel.
+// Note that alpha is not supported.
+//bezelTint: #8888FF
+
+// Color to use for the "loading, please wait" image
+// (use #00000000 if you don't want it to show at all).
+//loadingTint: #FFFFFF
