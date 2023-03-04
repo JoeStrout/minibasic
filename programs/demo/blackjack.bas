@@ -6,6 +6,8 @@
 110  PRINT  TAB(16)"BLACKJACK": PRINT : PRINT  TAB(14)"By Joe Strout"
 120  PRINT : PRINT : PRINT 
 140 CL$(1) = "H":CL$(2) = "S":CL$(3) = "D":CL$(4) = "C"
+141 REM ...but H, S, D, and C are boring ways to represent suits.  How about:
+145 CL$(1)=CHR$(9829):CL$(2)=CHR$(9824):CL$(3)=CHR$(9830):CL$(4)=CHR$(9827)
 150  FOR I = 2 TO 10:CD$(I) =  STR$ (I): NEXT :CD$(11) = "J":CD$(12) = "Q":CD$(13) = "K":CD$(1) = "A"
 190 MN = 40: REM  MONEY LEFT
 200  PRINT : PRINT : PRINT "   You have $"MN".": PRINT
