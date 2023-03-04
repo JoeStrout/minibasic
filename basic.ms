@@ -449,7 +449,6 @@ Evaluator.popValue = function
 	if not self.stack then return printErr("stack underflow")
 	se = self.stack.pop
 	if se.type == SE.number or se.type == SE.string or se.type == SE.list then return se.content
-	print "dangerously returning " + se.content; return se.content // HACK HACK HACK!
 	print "Type mismatch in popValue; got: " + se
 	pprint stackTrace
 	exit
@@ -676,7 +675,7 @@ Evaluator.evaluate = function(customLocals=null)
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
-			if self.stack and not isOpenParen(self.stack[-1]) then
+			if self.stack and not self.stack[-1].isOpenParen then
 				while self.stack.len >= 2 and self.stack[-2].isOperator
 					// process any higher-precedence operators already on stack
 					prevOp = self.stack[-2].content
