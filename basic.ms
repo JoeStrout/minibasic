@@ -511,7 +511,7 @@ Evaluator.doBinop = function
 end function
 
 Evaluator.doUnaryOp = function
-	opA = self.popvalue
+	opA = self.popValue
 	op = self.popOperator
 	if op == "-" then
 		self.pushValue -opA
