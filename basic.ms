@@ -361,12 +361,48 @@ end function
 // Expression evaluator
 //======================================================================
 
+// SE (Stack Entry) class: represents one item (typically a value,
+//	operator, or identifier) in our stack.
+SE = {}			// class to represent an operator (including `(` and `)`) on the stack
+SE.content = null	// actual value or identifier or whatever
+SE.type = null	// one of the following:
+SE.identifier = "identifier"
+SE.number = "number"
+SE.string = "string"
+SE.list = "list"
+SE.operator = "operator"
+SE.paren = "paren"		// includes both '(' and ')', but not, e.g., 'ABS('.
+SE.comma = "comma"
+SE.make = function(content, type)
+	result = new SE
+	result.type = type
+	result.content = content
+	return result
+end function
+SE.makeVal = function(v)
+	result = new SE
+	SE.type = se.value
+	se.content = v
+end function
+SE.isValue = function
+	return self.type == SE.number or self.type == SE.string or self.type == SE.list
+end function
+SE.isOpenParen = function
+	return (self.type == SE.paren and self.content == "(") or
+	  (self.type == SE.identifier and self.content[-1] == "(")
+end function
+SE.isOperator = function(op=null)
+	if self.type != SE.operator then return false
+	return op == null or self.content == op
+end function
+SE.toString = function; return self.type + "(" + self.content + ")"; end function
+
 Evaluator = {}
 Evaluator.tokens = []
 Evaluator.nextTokIdx = 0
 Evaluator.endIdx = 0
 Evaluator.done = function; return self.nextTokIdx >= self.endIdx; end function
-Evaluator.stack = null
+Evaluator.stack = null	// list of SE
 Evaluator.allowArrayRefs = false	// if true, let user pass entire array, e.g. A()
 
 Evaluator.make = function(tokens, startIdx=0, endIdx=null)
@@ -383,46 +419,91 @@ Evaluator.debugPrint = function(s)
 	//text.color = "#008800"; print s; text.color = gfx.color
 end function
 
+Evaluator.stackStr = function
+	result = []
+	for item in self.stack; result.push item.toString; end for
+	return "[" + result.join(", ") + "]"
+end function
+
+Evaluator.push = function(content, type)
+	if type == null then
+		print "Invalid call to Evaluator.push"
+		pprint stackTrace
+		exit
+	end if
+	se = new SE
+	se.content = content
+	se.type = type
+	self.stack.push se
+end function
+
+Evaluator.pushValue = function(value)
+	if value isa number then return self.push(value, SE.number)
+	if value isa string then return self.push(value, SE.string)
+	print "Invalid call to Evaluator.pushValue; got " + value
+	pprint stackTrace
+	exit
+end function
+
+Evaluator.popValue = function
+	if not self.stack then return printErr("stack underflow")
+	se = self.stack.pop
+	if se.type == SE.number or se.type == SE.string or se.type == SE.list then return se.content
+	print "dangerously returning " + se.content; return se.content // HACK HACK HACK!
+	print "Type mismatch in popValue; got: " + se
+	pprint stackTrace
+	exit
+end function
+
+Evaluator.popOperator = function
+	if not self.stack then return printErr("stack underflow")
+	se = self.stack.pop
+	if se.type == SE.operator then return se.content
+	print "Expected operator, got " + se.type + " in popOperator"
+	pprint stackTrace
+	exit
+end function
+
 Evaluator.doBinop = function
-	opB = self.stack.pop
-	op = self.stack.pop
-	opA = self.stack.pop		
+	opB = self.popValue
+	op = self.popOperator
+	opA = self.popValue
 	if op == "+" then
-		self.stack.push opA + opB
+		self.pushValue opA + opB
 	else if op == "-" then
-		self.stack.push opA - opB
+		self.pushValue opA - opB
 	else if op == "*" then
-		self.stack.push opA * opB
+		self.pushValue opA * opB
 	else if op == "/" then
-		self.stack.push opA / opB
+		self.pushValue opA / opB
 	else if op == "\" then
-		self.stack.push int(int(opA) / int(opB))
+		self.pushValue int(int(opA) / int(opB))
 	else if op == "MOD" then
-		self.stack.push opA % opB
+		self.pushValue opA % opB
 	else if op == "^" then
-		self.stack.push opA ^ opB
+		self.pushValue opA ^ opB
 	else if op == "=" then
-		self.stack.push opA == opB
+		self.pushValue opA == opB
 	else if op == "<>" then
-		self.stack.push opA != opB
+		self.pushValue opA != opB
 	else if op == "<" then
-		self.stack.push opA < opB
+		self.pushValue opA < opB
 	else if op == ">" then
-		self.stack.push opA > opB
+		self.pushValue opA > opB
 	else if op == "<=" then
-		self.stack.push opA <= opB
+		self.pushValue opA <= opB
 	else if op == ">=" then
-		self.stack.push opA >= opB	
+		self.pushValue opA >= opB	
 	else if op == "EQV" then
-		self.stack.push (opA != 0) == (opB != 0)	
+		self.pushValue (opA != 0) == (opB != 0)	
 	else if op == "IMP" then
-		self.stack.push (opA == 0) or (opA != 0 and opB != 0)	
+		self.pushValue (opA == 0) or (opA != 0 and opB != 0)	
 	else if op == "XOR" then
-		self.stack.push (opA == 0) != (opB == 0)
+		self.pushValue (opA == 0) != (opB == 0)
 	else if op == "OR" then
-		self.stack.push (opA != 0) or (opB != 0)
+		self.pushValue (opA != 0) or (opB != 0)
 	else if op == "AND" then
-		self.stack.push (opA != 0) and (opB != 0)
+		self.pushValue (opA != 0) and (opB != 0)
 	else
 		return printErr("Unknown operator: " + op)
 	end if
@@ -430,16 +511,15 @@ Evaluator.doBinop = function
 end function
 
 Evaluator.doUnaryOp = function
-	opA = self.stack.pop
-	op = self.stack.pop
+	opA = self.popvalue
+	op = self.popOperator
 	if op == "-" then
-		self.stack.push -opA
+		self.pushValue -opA
 	else if op == "NOT" then
-		self.stack.push not (opA != 0)
+		self.pushValue not (opA != 0)
 	end if
 	self.debugPrint "Applied " + op + " to " + opA + " to get " + self.stack[-1]
 end function
-
 
 // Find the function call (or array lookup) in the stack; it will
 // be the thing closest to the top that looks like "ABC(".  Return
@@ -449,13 +529,19 @@ end function
 Evaluator.pullCall = function
 	pos = self.stack.len - 1
 	while pos >= 0
-		if isOpenParen(self.stack[pos]) then
+		if self.stack[pos].isOpenParen then
 			// found it!  Grab the function and arguments, with commas...
 			result = self.stack[pos:]
-			// strip out the commas...
+			// strip out the commas, and extract the values...
 			if result.len > 1 then
 				for i in range(result.len-1, 1)
-					if result[i] == "," then result.remove i
+					if result[i].type == SE.comma then
+						result.remove i
+					else if result[i].isValue then
+						result[i] = result[i].content
+					else
+						return printErr("Unexpected type in call argument: " + result[i])
+					end if
 				end for
 			end if
 			// clear all that stuff off stack
@@ -473,7 +559,7 @@ end function
 // result onto the stack.
 Evaluator.doCallOrArray = function(call)
 	self.debugPrint "Evaluating a call: " + call
-	funcOrArrayName = call[0][:-1].upper
+	funcOrArrayName = call[0].content[:-1].upper
 	args = call[1:]
 	f = machine.fn.get(funcOrArrayName)
 	array = machine.arrs.get(funcOrArrayName)
@@ -486,7 +572,7 @@ Evaluator.doCallOrArray = function(call)
 	if @f then
 		// it's a function — invoke it!
  		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
- 		self.stack.push f(args)
+ 		self.pushValue f(args)
 	else if array != null then
 		// it's an array; look up the value (walking through dimensions
 		// of the array one at a time, until we have just a scalar left)
@@ -497,7 +583,7 @@ Evaluator.doCallOrArray = function(call)
 			array = array[idx]
 		end for
 		if array isa list and not self.allowArrayRefs then return printErr("not enough array indexes")
-		self.stack.push array
+		self.push array, SE.list
 	else
 		return printErr("unknown function or array " + funcOrArrayName)
 	end if
@@ -507,21 +593,21 @@ end function
 // the stack.  This should proceed until we hit either the
 // bottom of the stack, or an open paren, or a comma.
 Evaluator.collapseStack = function
-	self.debugPrint "Collapsing self.stack: " + self.stack
+	self.debugPrint "Collapsing self.stack: " + self.stackStr
 	while self.stack.len > 1
-		if self.stack[-2] == "," then return
-		if isOpenParen(self.stack[-2]) then return
-		if self.stack[-2] == "NOT" or (self.stack.len > 2 and isOpenParen(self.stack[-3])) then
+		if self.stack[-2].type == SE.comma then return
+		if self.stack[-2].isOpenParen then return
+		if self.stack[-2].isOperator("NOT") or (self.stack.len > 2 and self.stack[-3].isOpenParen) then
 			self.doUnaryOp
 		else if self.stack.len > 2 then
 			self.doBinop
-		else if self.stack[-2] == "-" then
+		else if self.stack[-2].isOperator("-") then
 			self.doUnaryOp
 		else
 			break
 		end if
 	end while
-	self.debugPrint "...collapsed to:  " + self.stack
+	self.debugPrint "...collapsed to:  " + self.stackStr
 end function
 
 // evaluate: evaluate a tokenized expression.
@@ -535,16 +621,20 @@ Evaluator.evaluate = function(customLocals=null)
 	while pos < self.endIdx
 		tok = self.tokens[pos]
 		self.debugPrint self.stack + " <-- " + tok
-		if tok isa string and tok.endsWith("(") then
+		if tok == "(" then
 			if canBail then break
-			self.stack.push tok
+			self.push tok, SE.paren
+			canBail = false
+		else if tok isa string and tok.endsWith("(") then	// e.g. ABS(
+			if canBail then break
+			self.push tok, SE.identifier
 			canBail = false
 		else if tok == "," then
 			// we've gotten a comma, which is a top-level grouper;
 			// go ahead and collapse anything on stack back to 
 			// the previous comma or open-paren
 			self.collapseStack
-			self.stack.push tok
+			self.push tok, SE.comma
 			canBail = false
 		else if tok == ")" then
 			// collapse last argument, i.e. collapse self.stack back to opening "(" or ","
@@ -553,7 +643,8 @@ Evaluator.evaluate = function(customLocals=null)
 			// sub-expression, or it is a function/array call.
 			// If it's a sub-expression, then the open paren must be the next-
 			// to-last item in stack.
-			if self.stack[self.stack.len-2] == "(" then
+			nextToLast = self.stack[self.stack.len-2]
+			if nextToLast.type == SE.paren and nextToLast.content == "(" then
 				self.debugPrint "Ordinary parenthesized sub-expression found"
 				// ...in this case, we just remove the open paren and we're done
 				self.stack.remove self.stack.len-2
@@ -570,25 +661,25 @@ Evaluator.evaluate = function(customLocals=null)
 		else if tok isa number then
 			// push a numeric operand
 			if canBail then break
-			self.stack.push tok
+			self.pushValue tok
 			if self.stack.len > 1 and self.stack[-2] == "-" and
 					(self.stack.len == 2 or (self.stack[-3] isa string and 
-					self.stack[-3].endsWith("("))) then
+					self.stack[-3].isOpenParen)) then
 				self.doUnaryOp
 			end if
 			canBail = true
 		else if tok[0] == """" then
 			// push a string literal
 			if canBail then break
-			self.stack.push stripQuotes(tok)
+			self.pushValue stripQuotes(tok)
 			canBail = true
 		else if operators.contains(tok) then
 			// get an operator...
 			opIdx = operators.indexOf(tok)
 			if self.stack and not isOpenParen(self.stack[-1]) then
-				while self.stack.len >= 2
+				while self.stack.len >= 2 and self.stack[-2].isOperator
 					// process any higher-precedence operators already on stack
-					prevOp = self.stack[-2]
+					prevOp = self.stack[-2].content
 					prevOpIdx = -1
 					if self.stack.len > 1 then prevOpIdx = operators.indexOf(prevOp)
 					self.debugPrint "at op " + opIdx + ", considering " + prevOpIdx
@@ -597,9 +688,9 @@ Evaluator.evaluate = function(customLocals=null)
 				end while
 			end if
 			// then push the new operator
-			self.stack.push tok
+			self.push tok, SE.operator
 			canBail = false
-			//print "Pushed operator: " + tok
+			self.debugPrint "Pushed operator: " + tok
 		else
 			// push the value of identifier
 			if canBail then break
@@ -609,7 +700,7 @@ Evaluator.evaluate = function(customLocals=null)
 				value = getValue(tok)
 				if value == null then return null
 			end if
-			self.stack.push value
+			self.pushValue value
 			if self.stack.len > 1 and self.stack[-2] == "-" and
 					(self.stack.len == 2 or (self.stack[-3] isa string and 
 					self.stack[-3].endsWith("("))) then
@@ -617,16 +708,16 @@ Evaluator.evaluate = function(customLocals=null)
 			end if
 			canBail = true
 		end if
-		self.debugPrint "After handling " + self.tokens[pos] + ", self.stack is now: " + self.stack
+		self.debugPrint "After handling " + self.tokens[pos] + ", self.stack is now: " + self.stackStr
 		pos += 1
 		self.nextTokIdx = pos
 	end while
 	// finally, collapse stack (which should be in precedence order)
 	self.collapseStack
 	if self.stack.len > 1 then
-		printErr "Syntax error -- extra stuff on self.stack: " + self.stack
+		printErr "Syntax error -- extra stuff on self.stack: " + self.stackStr
 	end if
-	if self.stack then return self.stack[0]
+	if self.stack then return self.popValue
 end function
 
 // Evaluate the given string of tokens, which should comprise a single expression.

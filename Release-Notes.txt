@@ -6,5 +6,11 @@ First public release.
 Mar 02, 2023: v0.9.3
 ====================
 + Fixed bug causing REM to be case-sensitive.
++ Fixed same bug affecting CLEAR and STOP.
+
+
+Not yet released: v0.9.4
+====================
++ Fixed bug causing `"(" = " "` to evaluate to true, and other oddities when string values contain fragments of BASIC code.
 
 
