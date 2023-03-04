@@ -18,7 +18,7 @@
 1030 DATA figureStanding, 57872, figureWaitingToeDown, 57873
 1040 DATA figureWaitingToeUp, 57874, figureAkimbo, 57875
 1050 DATA tree, 57888
-1060 DATA mu, 18, pi, 960, tau, 964
+1060 DATA mu,181, pi, 960, tau, 964
 1070 DATA invertedBang, 161, copyright, 169, registered, 174
 1080 DATA lineEndSymbol, 172, degrees, 176, invertedQuestion, 191
 1090 DATA multSign, 215, divSign, 247
