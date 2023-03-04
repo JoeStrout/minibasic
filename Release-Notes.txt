@@ -12,5 +12,6 @@ Mar 02, 2023: v0.9.3
 Not yet released: v0.9.4
 ====================
 + Fixed bug causing `"(" = " "` to evaluate to true, and other oddities when string values contain fragments of BASIC code.
++ Added demo/oddChars.bas.
 
 
