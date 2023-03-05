@@ -707,9 +707,10 @@ Evaluator.evaluate = function(customLocals=null)
 			end if
 			canBail = true
 		end if
+		if machine.halt then return null
 		self.debugPrint "After handling " + self.tokens[pos] + ", self.stack is now: " + self.stackStr
 		pos += 1
-		self.nextTokIdx = pos
+		self.nextTokIdx = pos		
 	end while
 	// finally, collapse stack (which should be in precedence order)
 	self.collapseStack
