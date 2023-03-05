@@ -76,7 +76,7 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | DIM _name_(_n_ \[,_m_ ...\]) | declares an array with valid indexes from 0 to _n_ inclusive, or a multidimensional array with additional dimensions _m_, etc.  Array will be numeric unless _name_ ends in `$`, in which case it is a string array.  Throws an error if _name_ is already in use as an array. |
 | ELLIPSE \[_x1_, _y1_ TO\] _x2_, _y2_ | draws or fills an ellipse from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | END | halts the current program and returns to the MiniBASIC prompt; STOP is a synonym |
-| FILL \[ON|OFF\] | turns fill mode ON or OFF, controlling behavior of subsequent RECT, ELLIPSE, or POLY command |
+| FILL \[ON\|OFF\] | turns fill mode ON or OFF, controlling behavior of subsequent RECT, ELLIPSE, or POLY command |
 | FOR _var_ = _n_ TO _m_ \[STEP _s_\] | begins a FOR loop running from _n_ to _m_, steps of _s_ (default 1) |
 | GET _var_ | waits for a keypress to appear in the keyboard buffer, then returns it.  If _var_ is a string variable, returns the character pressed; if it is a numeric variable, returns the ASC value of the character pressed |
 | GOSUB _lineNum_ | pushes the next statement onto the RETURN stack, then jumps to line _lineNum_ |
