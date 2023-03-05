@@ -9,9 +9,9 @@ Mar 02, 2023: v0.9.3
 + Fixed same bug affecting CLEAR and STOP.
 
 
-Not yet released: v0.9.4
+Mar 04, 2023: v0.9.4
 ====================
 + Fixed bug causing `"(" = " "` to evaluate to true, and other oddities when string values contain fragments of BASIC code.
-+ Added demo/oddChars.bas.
++ Added two new programs: demo/oddChars.bas and demo/othello.bas
 
 
