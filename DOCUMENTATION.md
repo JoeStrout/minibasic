@@ -49,6 +49,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | PIXEL$(_x_,_y_) | returns the color of the graphics layer at pixel _x_, _y_, as an HTML color string, e.g. "#00CC55" |
 | POS(_n_) | when _n_ is even, returns the current text cursor column; when odd, returns text cursor row |
 | RIGHT$(_a$_, _n_) | rightmost _n_ characters of string _a$_; see also LEFT$, MID$ |
+| RND(_n_) | when _n_ is >= 0, returns a random number from 0 to 1; when _n_ < 0, seeds the random number generator |
 | SGN(_n_) | sign of _n_, i.e. 1 if _n_ > 0, -1 if _n_ < 0, and 0 if _n_ = 0 |
 | SIN(_n_) | sine of _n_ radians |
 | SPACE$(_n_) | a string composed of _n_ space characters |
