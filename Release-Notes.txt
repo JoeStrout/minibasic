@@ -15,3 +15,8 @@ Mar 04, 2023: v0.9.4
 + Added two new programs: demo/oddChars.bas and demo/othello.bas
 
 
+not yet released: v0.9.5
+====================
++ Better error handling/reporting in various cases:
+  + argument invoked without a function call, e.g. RND()
+
