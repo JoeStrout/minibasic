@@ -572,7 +572,9 @@ Evaluator.doCallOrArray = function(call)
 		// it's a function — invoke it!
 		if not args then return printErr("argument required for function call")
  		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
- 		self.pushValue f(args)
+ 		result = f(args)
+ 		if machine.halt then return
+ 		self.pushValue result
 	else if array != null then
 		// it's an array; look up the value (walking through dimensions
 		// of the array one at a time, until we have just a scalar left)
