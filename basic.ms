@@ -449,6 +449,7 @@ Evaluator.popValue = function
 	if not self.stack then return printErr("stack underflow")
 	se = self.stack.pop
 	if se.type == SE.number or se.type == SE.string or se.type == SE.list then return se.content
+	if se.type == SE.comma then return printErr("missing argument")
 	print "Type mismatch in popValue; got: " + se
 	pprint stackTrace
 	exit
@@ -465,7 +466,9 @@ end function
 
 Evaluator.doBinop = function
 	opB = self.popValue
+	if machine.halt then return
 	op = self.popOperator
+	if machine.halt then return
 	opA = self.popValue
 	if op == "+" then
 		self.pushValue opA + opB
@@ -511,6 +514,7 @@ end function
 
 Evaluator.doUnaryOp = function
 	opA = self.popValue
+	if machine.halt then return
 	op = self.popOperator
 	if op == "-" then
 		self.pushValue -opA
@@ -596,7 +600,7 @@ end function
 // bottom of the stack, or an open paren, or a comma.
 Evaluator.collapseStack = function
 	self.debugPrint "Collapsing self.stack: " + self.stackStr
-	while self.stack.len > 1
+	while self.stack.len > 1 and not machine.halt
 		if self.stack[-2].type == SE.comma then return
 		if self.stack[-2].isOpenParen then return
 		if self.stack[-2].isOperator("NOT") or (self.stack.len > 2 and self.stack[-3].isOpenParen) then

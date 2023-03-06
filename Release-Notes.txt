@@ -19,4 +19,5 @@ not yet released: v0.9.5
 ====================
 + Better error handling/reporting in various cases:
   + argument invoked without a function call, e.g. RND()
+  + type mismatch in a function call, e.g. MID$(1, "Oops", 1)
 
