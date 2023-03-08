@@ -22,5 +22,5 @@
 6090 COLOR "#" + MID$(_pal$, _color * 7 + 1, 6) : RETURN 
 6100 REM Fill rectangle from _x,_y to _x2,_y2
 6105 FILL ON 
-6110 RECT _x * 24, 627 - _y * 13 TO _x2 * 24 + 24, 640 - _y2 * 13
+6110 RECT _x * 24, 627 - _y2 * 13 TO _x2 * 24 + 24, 640 - _y * 13
 6120 RETURN 
