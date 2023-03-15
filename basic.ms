@@ -1692,8 +1692,8 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 			remainingInput = remainingInput[delimPos+1:].trimLeft
 		else
 			// string var: grab up to the next comma, unless this is the final variable
-			if pos < endIdx-1 then
-				delimPos = remainingInput.indexOfAny(", ", -1, remainingInput.len)
+			if varEndPos < endIdx then
+				delimPos = remainingInput.indexOfAny(",", -1, remainingInput.len)
 				value = remainingInput[:delimPos]
 				remainingInput = remainingInput[delimPos+1:]
 			else
@@ -2432,7 +2432,7 @@ runMainLoop = function
 	machine.cmd.HOME
 	runUnitTests
 
-	print "MiniBASIC 0.9.4"
+	print "MiniBASIC 0.9.5"
 
 	globals.basic = function
 		reset
