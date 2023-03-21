@@ -358,146 +358,14 @@ tokenize = function(line)
 end function
 
 //======================================================================
-// Syntax Tree Nodes (can be evaluated efficiently once built)
-//======================================================================
-SyntaxNode = {}
-SyntaxNode.str = function
-	return mapName(self.__isa)
-end function
-SyntaxNode.toCode = function
-	print "Please override toCode in your SyntaxNode subclass!"
-	exit
-end function
-
-SNLiteral = new SyntaxNode
-SNLiteral.value = null	// number or string, or null
-SNLiteral.eval = function; return self.value; end function
-SNLiteral.str = function; return super.str + "(" + self.toCode + ")"; end function
-SNLiteral.toCode = function
-	if self.value isa number then return str(self.value)
-	if self.value isa string then return """" + self.value.replace("""", """""") + """"
-	return str(self.value)
-end function
-SNLiteral.make = function(value)
-	result = new SNLiteral
-	result.value = value
-	return result
-end function
-
-SNBinop = new SyntaxNode
-SNBinop.op = "?"
-SNBinop.lhs = null
-SNBinop.rhs = null
-SNBinop.str = function
-	return super.str + "(" + self.lhs.str + ", " + self.rhs.str + ")"
-end function
-SNBinop.toCode = function
-	return self.lhs.toCode + " " + self.op + " " + self.rhs.toCode
-end function
-SNBinop.make = function(class, a, op, b)
-	result = new class
-	result.lhs = a; result.op = op; result.rhs = b
-	return result
-end function
-
-SNAdd = new SNBinop
-SNAdd.eval = function; return self.lhs.eval + self.rhs.eval; end function
-SNAdd.make = function(a,b); return SNBinop.make(SNAdd, a, "+", b); end function
-
-SNMult = new SNBinop
-SNMult.eval = function; return self.lhs.eval * self.rhs.eval; end function
-SNMult.make = function(a,b); return SNBinop.make(SNMult, a, "*", b); end function
-
-SNSub = new SNBinop
-SNSub.eval = function; return self.lhs.eval - self.rhs.eval; end function
-SNSub.make = function(a,b); return SNBinop.make(SNSub, a, "-", b); end function
-
-SNDiv = new SNBinop
-SNDiv.eval = function; return self.lhs.eval / self.rhs.eval; end function
-SNDiv.make = function(a,b); return SNBinop.make(SNDiv, a, "/", b); end function
-
-SNIDiv = new SNBinop
-SNIDiv.eval = function; return int(int(self.lhs.eval) / int(self.rhs.eval)); end function
-SNIDiv.make = function(a,b); return SNBinop.make(SNIDiv, a, "\", b); end function
-
-SNMod = new SNBinop
-SNMod.eval = function; return self.lhs.eval % self.rhs.eval; end function
-SNMod.make = function(a,b); return SNBinop.make(SNMod, a, "%", b); end function
-
-SNPow = new SNBinop;
-SNPow.eval = function; return self.lhs.eval ^ self.rhs.eval; end function
-SNPow.make = function(a,b); return SNBinop.make(SNPow, a, "^", b); end function
-
-SNEq = new SNBinop
-SNEq.eval = function; return self.lhs.eval == self.rhs.eval; end function
-SNEq.make = function(a,b); return SNBinop.make(SNEq, a, "=", b); end function
-
-SNNotEq = new SNBinop
-SNNotEq.eval = function; return self.lhs.eval != self.rhs.eval; end function
-SNNotEq.make = function(a,b); return SNBinop.make(SNNotEq, a, "<>", b); end function
-
-SNLT = new SNBinop
-SNLT.eval = function; return self.lhs.eval < self.rhs.eval; end function
-SNLT.make = function(a,b); return SNBinop.make(SNLT, a, "<", b); end function
-
-SNGT = new SNBinop
-SNGT.eval = function; return self.lhs.eval > self.rhs.eval; end function
-SNGT.make = function(a,b); return SNBinop.make(SNGT, a, ">", b); end function
-
-SNLE = new SNBinop
-SNLE.eval = function; return self.lhs.eval <= self.rhs.eval; end function
-SNLE.make = function(a,b); return SNBinop.make(SNLE, a, "<=", b); end function
-
-SNGE = new SNBinop
-SNGE.eval = function; return self.lhs.eval >= self.rhs.eval; end function
-SNGE.make = function(a,b); return SNBinop.make(SNGE, a, ">=", b); end function
-
-SNEQV = new SNBinop
-SNEQV.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
-	return (opA != 0) == (opB != 0)
-end function
-SNEQV.make = function(a,b); return SNBinop.make(SNEQV, a, "EQV", b); end function
-
-SNIMP = new SNBinop
-SNIMP.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
-	return (opA == 0) or (opA != 0 and opB != 0)
-end function
-SNIMP.make = function(a,b); return SNBinop.make(SNIMP, a, "IMP", b); end function
-
-SNXOR = new SNBinop
-SNXOR.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
-	return (opA == 0) != (opB == 0)
-end function
-SNXOR.make = function(a,b); return SNBinop.make(SNXOR, a, "XOR", b); end function
-
-SNOR = new SNBinop
-SNOR.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
-	return (opA != 0) or (opB != 0)
-end function
-SNOR.make = function(a,b); return SNBinop.make(SNOR, a, "OR", b); end function
-
-SNAND = new SNBinop
-SNAND.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
-	return (opA != 0) and (opB != 0)
-end function
-SNAND.make = function(a,b); return SNBinop.make(SNAND, a, "AND", b); end function
-
-
-//======================================================================
-// Expression parser
+// Expression evaluator
 //======================================================================
 
-// SE (Stack Entry) class: represents one item (typically a SyntaxNode, 
-//	raw value, operator, or identifier) in our stack.
+// SE (Stack Entry) class: represents one item (typically a value,
+//	operator, or identifier) in our stack.
 SE = {}			// class to represent an operator (including `(` and `)`) on the stack
 SE.content = null	// actual value or identifier or whatever
 SE.type = null	// one of the following:
-SE.node = "node"
 SE.identifier = "identifier"
 SE.number = "number"
 SE.string = "string"
@@ -513,11 +381,11 @@ SE.make = function(content, type)
 end function
 SE.makeVal = function(v)
 	result = new SE
-	se.type = se.node
-	se.content = SNLiteral.make(v)
+	SE.type = se.value
+	se.content = v
 end function
 SE.isValue = function
-	return self.type == SE.node // ...or SE.number or self.type == SE.string or self.type == SE.list
+	return self.type == SE.number or self.type == SE.string or self.type == SE.list
 end function
 SE.isOpenParen = function
 	return (self.type == SE.paren and self.content == "(") or
@@ -527,10 +395,7 @@ SE.isOperator = function(op=null)
 	if self.type != SE.operator then return false
 	return op == null or self.content == op
 end function
-SE.toString = function
-	if self.type == SE.node then return self.content.str
-	return self.type + "(" + self.content + ")"
-end function
+SE.toString = function; return self.type + "(" + self.content + ")"; end function
 
 Evaluator = {}
 Evaluator.tokens = []
@@ -573,11 +438,8 @@ Evaluator.push = function(content, type)
 end function
 
 Evaluator.pushValue = function(value)
-	if value isa number or value isa string then
-		return self.push(SNLiteral.make(value), SE.node)
-	else if value isa SyntaxNode then
-		return self.push(value, SE.node)
-	end if
+	if value isa number then return self.push(value, SE.number)
+	if value isa string then return self.push(value, SE.string)
 	print "Invalid call to Evaluator.pushValue; got " + value
 	pprint stackTrace
 	exit
@@ -586,7 +448,7 @@ end function
 Evaluator.popValue = function
 	if not self.stack then return printErr("stack underflow")
 	se = self.stack.pop
-	if se.type == SE.node then return se.content
+	if se.type == SE.number or se.type == SE.string or se.type == SE.list then return se.content
 	if se.type == SE.comma then return printErr("missing argument")
 	print "Type mismatch in popValue; got: " + se
 	pprint stackTrace
@@ -609,41 +471,41 @@ Evaluator.doBinop = function
 	if machine.halt then return
 	opA = self.popValue
 	if op == "+" then
-		self.pushValue SNAdd.make(opA, opB)
+		self.pushValue opA + opB
 	else if op == "-" then
-		self.pushValue SNSub.make(opA, opB)
+		self.pushValue opA - opB
 	else if op == "*" then
-		self.pushValue SNMult.make(opA, opB)
+		self.pushValue opA * opB
 	else if op == "/" then
-		self.pushValue SNDiv.make(opA, opB)
+		self.pushValue opA / opB
 	else if op == "\" then
-		self.pushValue SNIDiv.make(opA, opB)
+		self.pushValue int(int(opA) / int(opB))
 	else if op == "MOD" then
-		self.pushValue SNMod.make(opA, opB)
+		self.pushValue opA % opB
 	else if op == "^" then
-		self.pushValue SNPow.make(opA, opB)
+		self.pushValue opA ^ opB
 	else if op == "=" then
-		self.pushValue SNEq.make(opA, opB)
+		self.pushValue opA == opB
 	else if op == "<>" then
-		self.pushValue SNNotEq.make(opA, opB)
+		self.pushValue opA != opB
 	else if op == "<" then
-		self.pushValue SNLT.make(opA, opB)
+		self.pushValue opA < opB
 	else if op == ">" then
-		self.pushValue SNGT.make(opA, opB)
+		self.pushValue opA > opB
 	else if op == "<=" then
-		self.pushValue SNLE.make(opA, opB)
+		self.pushValue opA <= opB
 	else if op == ">=" then
-		self.pushValue SNGE.make(opA, opB)
+		self.pushValue opA >= opB	
 	else if op == "EQV" then
-		self.pushValue SNEQV.make(opA, opB)
+		self.pushValue (opA != 0) == (opB != 0)	
 	else if op == "IMP" then
-		self.pushValue SNIMP.make(opA, opB)
+		self.pushValue (opA == 0) or (opA != 0 and opB != 0)	
 	else if op == "XOR" then
-		self.pushValue SNXOR.make(opA, opB)
+		self.pushValue (opA == 0) != (opB == 0)
 	else if op == "OR" then
-		self.pushValue SNOR.make(opA, opB)
+		self.pushValue (opA != 0) or (opB != 0)
 	else if op == "AND" then
-		self.pushValue SNAND.make(opA, opB)
+		self.pushValue (opA != 0) and (opB != 0)
 	else
 		return printErr("Unknown operator: " + op)
 	end if
@@ -754,17 +616,17 @@ Evaluator.collapseStack = function
 	self.debugPrint "...collapsed to:  " + self.stackStr
 end function
 
-// parse: evaluate a tokenized expression, returning a SyntaxNode that
-// represents its whole parse tree.
-Evaluator.parse = function(customLocals=null)
-	self.debugPrint "Evaluator.parse(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
+// evaluate: evaluate a tokenized expression.
+//  For example, given [6, "*", 7], return 42.
+Evaluator.evaluate = function(customLocals=null)
+	self.debugPrint "evalTokens(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
 	self.stack = []
 	canBail = false	// marks points where we can bail out if we start a new value
 
 	pos = self.nextTokIdx
 	while pos < self.endIdx
 		tok = self.tokens[pos]
-		self.debugPrint self.stackStr + " <-- " + tok
+		self.debugPrint self.stack + " <-- " + tok
 		if tok == "(" then
 			if canBail then break
 			self.push tok, SE.paren
@@ -865,12 +727,6 @@ Evaluator.parse = function(customLocals=null)
 	if self.stack then return self.popValue
 end function
 
-// evaluate: evaluate a tokenized expression, all the way to a value.
-//  For example, given [6, "*", 7], return 42.
-Evaluator.evaluate = function(customLocals=null)
-	parseTree = self.parse
-	if parseTree then return parseTree.eval
-end function
 // Evaluate the given string of tokens, which should comprise a single expression.
 evalTokens = function(tokens, customLocals=null)
 	eval = Evaluator.make(tokens)
@@ -1455,11 +1311,6 @@ Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 
 // Define all the BASIC commands 
 // (in alphabetical order below)
-
-Command = {}
-Command.run = null
-cmd = {}
-
 Machine.cmd = {}
 
 Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
@@ -1611,14 +1462,10 @@ Machine.cmd.ELLIPSE = function(tokens, startIdx, endIdx)
 	machine.plotPos = args[2:]
 end function
 
-cmd.END = new Command
-cmd.END.parse = function(tokens, startIdx, endIdx)
-	return new cmd.END
-end function
-cmd.END.run = function
+Machine.cmd.END = function(tokens, startIdx, endIdx)
 	machine.halt = true
 end function
-cmd.STOP = cmd.END
+Machine.cmd.STOP = @Machine.cmd.END
 
 Machine.cmd.FILL = function(tokens, startIdx, endIdx)
 	if tokens.len < startIdx + 1 then
@@ -2053,58 +1900,6 @@ Machine.cmd.POLY = function(tokens, startIdx, endIdx)
 	machine.plotPos = [x[-1], y[-1]]
 end function
 
-cmd.PRINT = new Command
-cmd.PRINT.parse = function(tokens, startIdx, endIdx)
-	// print a series of expressions, separated by , or ; or even just whitespace.
-	result = new cmd.PRINT
-	result.args = []
-	result.delims = []
-	fileAndPos = getFile(tokens, startIdx)
-	if fileAndPos == null then return
-	f = fileAndPos[0]; pos = fileAndPos[1]
-	
-	needEOL = true
-	eval = Evaluator.make(tokens, startIdx, endIdx)
-	
-	while eval.nextTokIdx < endIdx
-		// Grab complete expressions even if they aren't separated
-		// by any delimiters.  This is weird, but something old BASICS did,
-		// and you can find old BASIC programs that actually use this.  :(		
-		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
-		if pos == endIdx then break			
-//		print "Now to print: " + tokens[pos:endPos]
-		eval.nextTokIdx = pos
-		eval.endIdx = endPos
-		arg = eval.parse
-		print "Tokens " + pos + ":" + endPos + " parses to " + arg.str
-		if arg == null then break
-		result.args.push arg
-		if eval.nextTokIdx < endIdx then
-			nextTok = tokens[eval.nextTokIdx]
-			if nextTok == "," then
-				result.delims.push " "	// ...or char(9)?
-			end if
-			if nextTok == "," or nextTok == ";" then eval.nextTokIdx += 1
-			needEOL = false
-		else if tokens[pos] == "TAB(" then
-			// weird quirk of old BASIC: the TAB function acts like a semicolon
-			result.delims.push ""
-			needEOL = false
-		else
-			needEOL = true
-		end if
-		pos = eval.nextTokIdx
-	end while
-	if needEOL then result.delims.push char(10)
-	return result
-end function
-cmd.PRINT.run = function
-	for i in self.args.indexes
-		print self.args[i].eval, self.delims[i]
-	end for
-	if i+1 < self.delims.len then print self.delims[-1], ""
-end function
-
 Machine.cmd.PRINT = function(tokens, startIdx, endIdx)
 	// print a series of expressions, separated by , or ;
 //	print "Printing " + tokens + " " + startIdx+":"+endIdx
@@ -2408,32 +2203,26 @@ end function
 // within the same set, or null if there are no more.
 Machine.runOneStatement = function(tokens, startTokenIndex)
 	if startTokenIndex >= tokens.len then return null
-	cmdName = tokens[startTokenIndex]
-	if isIdentifier(cmdName) then
+	cmd = tokens[startTokenIndex]
+	if isIdentifier(cmd) then
 		// check for the special case of an assignment statement without LET
-		if isOpenParen(cmdName) then
+		if isOpenParen(cmd) then
 			assignPos = tokens.findCloseParen(startTokenIndex + 1) + 1
 		else
 			assignPos = startTokenIndex + 1
 		end if
-		if assignPos < tokens.len and tokens[assignPos] == "=" then cmdName = "LET"
+		if assignPos < tokens.len and tokens[assignPos] == "=" then cmd = "LET"
 	end if
 	statementEnd = tokens.indexOfAny([":","THEN","ELSE"], startTokenIndex)
 	if statementEnd == null then statementEnd = tokens.len
-	cmdObj = cmd.get(cmdName)
-	if cmdObj == null then
-		print "Command not found: " + cmdName
-		return null
-	end if
-	print "found parse." + cmdName
-	cmdRunner = cmdObj.parse(tokens, startTokenIndex, statementEnd)
+	f = self.cmd.get(cmd)
 //	print "calling cmd." + cmd + " with " + tokens + "[" + startTokenIndex + ":" + statementEnd + "]"
-	if cmdRunner then
+	if @f then
 		// Most commands don't alter the next statement to run,
 		// but a few do.  Give each one a chance to return the
 		// next token index; but if they don't, just advance
 		// past the delimiter (unless it's ELSE).
-		nextStart = cmdRunner.run
+		nextStart = f(tokens, startTokenIndex, statementEnd)
 		if nextStart == null then
 			if statementEnd < tokens.len and tokens[statementEnd] == "ELSE" then
 				if not machine.inThen then return printErr("Unexpected ELSE")
@@ -2641,7 +2430,7 @@ runMainLoop = function
 	env.bootOpts.controlC = false
 	machine.reset
 	machine.cmd.HOME
-	//runUnitTests
+	runUnitTests
 
 	print "MiniBASIC 0.9.5"
 
