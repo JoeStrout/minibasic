@@ -495,6 +495,54 @@ SNNOT.make = function(x)
 	return result
 end function
 
+SNArrayOrCall = new SyntaxNode
+SNArrayOrCall.eval = function
+	Evaluator.debugPrint "Evaluating a call: " + self.name
+	funcOrArrayName = self.name
+	args = []
+	for n in self.args; args.push n.eval; end for
+	f = machine.fn.get(funcOrArrayName)
+	array = machine.arrs.get(funcOrArrayName)
+	if @f == null and array == null then
+		// old-BASIC quirk: even arrays exist automatically, as soon as they are
+		// referenced, with 1 dimension and a size of 10.
+		if isNumericId(funcOrArrayName) then array = [0]*11 else array = [""]*11
+		machine.arrs[funcOrArrayName] = array
+	end if
+	if @f then
+		// it's a function — invoke it!
+		if not args then return printErr("argument required for function call")
+ 		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
+ 		result = f(args)
+ 		if machine.halt then return
+ 		return result
+	else if array != null then
+		// it's an array; look up the value (walking through dimensions
+		// of the array one at a time, until we have just a scalar left)
+		for idx in args
+			if not array isa list then return printErr("too many array indexes")
+			if not idx isa number then return printErr("array index must be numeric")
+			if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
+			array = array[idx]
+		end for
+		if array isa list and not self.allowArrayRefs then return printErr("not enough array indexes")
+		return array
+	else
+		return printErr("unknown function or array " + funcOrArrayName)
+	end if
+end function
+SNArrayOrCall.str = function
+	strArgs = []
+	for n in self.args; strArgs.push n.str; end for
+	return self.name + "(" + join(strArgs, ",") + ")"
+end function
+SNArrayOrCall.make = function(name, indexNodes)
+	print "make with: " + name + " and: " + indexNodes
+	result = new SNArrayOrCall
+	result.name = name
+	result.args = indexNodes
+	return result
+end function
 
 //======================================================================
 // Expression parser
@@ -704,44 +752,6 @@ Evaluator.pullCall = function
 	return null
 end function
 
-// Evaluate a function call or array lookup, represented as a 
-// list of the sort returned by pullCall (above).  Push the 
-// result onto the stack.
-Evaluator.doCallOrArray = function(call)
-	self.debugPrint "Evaluating a call: " + call
-	funcOrArrayName = call[0].content[:-1].upper
-	args = call[1:]
-	f = machine.fn.get(funcOrArrayName)
-	array = machine.arrs.get(funcOrArrayName)
-	if @f == null and array == null then
-		// old-BASIC quirk: even arrays exist automatically, as soon as they are
-		// referenced, with 1 dimension and a size of 10.
-		if isNumericId(funcOrArrayName) then array = [0]*11 else array = [""]*11
-		machine.arrs[funcOrArrayName] = array
-	end if
-	if @f then
-		// it's a function — invoke it!
-		if not args then return printErr("argument required for function call")
- 		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
- 		result = f(args)
- 		if machine.halt then return
- 		self.pushValue result
-	else if array != null then
-		// it's an array; look up the value (walking through dimensions
-		// of the array one at a time, until we have just a scalar left)
-		for idx in args
-			if not array isa list then return printErr("too many array indexes")
-			if not idx isa number then return printErr("array index must be numeric")
-			if idx < 0 or idx >= array.len then return printErr("out of bounds error on " + funcOrArrayName)
-			array = array[idx]
-		end for
-		if array isa list and not self.allowArrayRefs then return printErr("not enough array indexes")
-		self.push array, SE.list
-	else
-		return printErr("unknown function or array " + funcOrArrayName)
-	end if
-end function
-
 // Collapse any binary and unary operators on the top of 
 // the stack.  This should proceed until we hit either the
 // bottom of the stack, or an open paren, or a comma.
@@ -805,7 +815,10 @@ Evaluator.parse = function(customLocals=null)
 				// otherwise, it should be a call (or array lookup)
 				call = self.pullCall
 				if call then
-					self.doCallOrArray call
+					self.debugPrint "Evaluating a call: " + call
+					funcOrArrayName = call[0].content[:-1].upper
+					args = call[1:]
+					self.pushValue SNArrayOrCall.make(funcOrArrayName, args)
 				else if self.stack.len < 3 then
 					return printErr("unmatched parentheses")
 				end if
@@ -1469,9 +1482,13 @@ Command = {}
 Command.run = null
 cmd = {}
 
-Machine.cmd = {}
+Machine.cmd = {}	// ToDo: delete this!
 
-Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
+cmd.BREAK = new Command
+cmd.BREAK.parse = function(tokens, startIdx, endIdx)
+	return new cmd.BREAK
+end function
+cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	print
 	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len and
 			machine.lineNums[machine.lineIdx] >= 0 then
@@ -1483,20 +1500,36 @@ Machine.cmd.BREAK = function(tokens, startIdx, endIdx)
 	while controlCPressed; yield; end while
 end function
 
-Machine.cmd.CD = function(tokens, startIdx, endIdx)
+cmd.CD = new Command
+cmd.CD.parse = function(tokens, startIdx, endIdx)
 	args = tokens[startIdx+1:endIdx]
 	args.apply(@stripQuotes)
 	path = args.join("").trim
-	cd path
+	result = new cmd.CD
+	result.path = path
+	return result
+end function
+cmd.CD.run = function(tokens, startIdx, endIdx)
+	cd self.path
 end function
 
-Machine.cmd.CLEAR = function(tokens, startIdx, endIdx)
+cmd.CLEAR = new Command
+cmd.CLEAR.parse = function(tokens, startIdx, endIdx)
+	return new cmd.CLEAR
+end function
+cmd.CLEAR.run = function
 	machine.vars = {}
 	machine.arrs = {}
 end function
 
-Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
-	globals.arg = evalTokens(tokens[startIdx+1:endIdx])
+cmd.COLOR = new Command
+cmd.COLOR.parse = function(tokens, startIdx, endIdx)
+	result = new cmd.COLOR
+	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	return result
+end function
+cmd.COLOR.run = function
+	arg = self.arg.eval
 	if arg isa number then
 		gfx.color = palette[arg % palette.len]
 	else if arg[0] == "#" then
@@ -1506,9 +1539,10 @@ Machine.cmd.COLOR = function(tokens, startIdx, endIdx)
 end function
 
 Machine.cmd.DATA = function(tokens, startIdx, endIdx)
-	// no action needed!
+	// ToDo
 end function
 
+// ToDo:
 Machine.cmd.DEF = function(tokens, startIdx, endIdx)
 	startIdx += 1	// skip DEF
 	// grab the function name and dummy argument
@@ -1532,7 +1566,10 @@ Machine.cmd.DEF = function(tokens, startIdx, endIdx)
 	end function
 end function
 
-Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
+cmd.DIM = new Command
+cmd.DIM.parse = function(tokens, startIdx, endIdx, redim=false)
+	result = new cmd.DIM
+	result.nameToDims = {}	// key: array name; value: array dimensions
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
 	pos = startIdx + 1
 	while pos < endIdx
@@ -1560,12 +1597,19 @@ Machine.cmd.DIM = function(tokens, startIdx, endIdx, redim=false)
 			oldArr = machine.arrs[name]
 		end if
 
+		result.nameToDims[name] = dims	
+		if pos < endIdx and tokens[pos] == "," then pos += 1
+	end while
+	return result
+end function
+cmd.DIM.run = function
+	for kv in self.nameToDims
+		name = kv.key
+		dims = kv.value
 		if isNumericId(name) then defaultVal = 0 else defaultVal = ""
 		machine.arrs[name] = makeMultiDimArray(dims, defaultVal)
 		// ToDo: maybe copy old data, as much as possible?
-		
-		if pos < endIdx and tokens[pos] == "," then pos += 1
-	end while
+	end for
 end function
 
 Machine.cmd.DIR = function(tokens, startIdx, endIdx, redim=false)
@@ -1871,36 +1915,24 @@ Machine.cmd.INPUT = function(tokens, startIdx, endIdx)
 end function
 Machine.cmd["INPUT#"] = @Machine.cmd.INPUT
 
-Machine.cmd.LOAD = function(tokens, startIdx, endIdx)
-	args = tokens[startIdx+1:endIdx]
-	args.apply(@stripQuotes)
-	path = args.join("").trim
-	path = path - ".bas" + ".bas"
-	lines = file.readLines(path)
-	if lines == null then
-		print "Unable to read program " + path
-	else
-		machine.reset
-		for line in lines
-			repl line
-		end for
-		print machine.program.len + " lines loaded from " + path
-		machine.programPath = path	// ToDo: get full path
-	end if
-end function
-
-Machine.cmd.LET = function(tokens, startIdx, endIdx)
+cmd.LET = new Command
+cmd.LET.parse = function(tokens, startIdx, endIdx)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
+	result = new cmd.LET
 	varEndPos = startIdx + 1
 	if isOpenParen(tokens[startIdx]) then
 		varEndPos = tokens.findCloseParen(startIdx+1, endIdx) + 1
 		if varEndPos == null then return printErr("unmatched parentheses")
 	end if
-	lvar = Lvar.make(tokens, startIdx, varEndPos)
-	if lvar == null then return
+	result.lvar = Lvar.make(tokens, startIdx, varEndPos)
+	if result.lvar == null then return null
 	
 	if tokens[varEndPos] != "=" then return printErr("syntax error in assignment")
-	setValue lvar, evalTokens(tokens[varEndPos+1:endIdx])
+	result.rhs = Evaluator.make(tokens, varEndPos+1, endIdx).parse
+	return result
+end function
+cmd.LET.run = function
+	setValue self.lvar, self.rhs.eval
 end function
 
 Machine.cmd.LINE = function(tokens, startIdx, endIdx)
@@ -1921,6 +1953,24 @@ end function
 
 Machine.cmd.LISTREM = function(tokens, startIdx, endIdx)
 	listProgram getRange(tokens[startIdx+1:endIdx]), true
+end function
+
+Machine.cmd.LOAD = function(tokens, startIdx, endIdx)
+	args = tokens[startIdx+1:endIdx]
+	args.apply(@stripQuotes)
+	path = args.join("").trim
+	path = path - ".bas" + ".bas"
+	lines = file.readLines(path)
+	if lines == null then
+		print "Unable to read program " + path
+	else
+		machine.reset
+		for line in lines
+			repl line
+		end for
+		print machine.program.len + " lines loaded from " + path
+		machine.programPath = path	// ToDo: get full path
+	end if
 end function
 
 Machine.cmd.NEXT = function(tokens, startIdx, endIdx)
@@ -2085,7 +2135,7 @@ cmd.PRINT.parse = function(tokens, startIdx, endIdx)
 		eval.nextTokIdx = pos
 		eval.endIdx = endPos
 		arg = eval.parse
-		print "Tokens " + pos + ":" + endPos + " parses to " + arg.str
+		print "Tokens " + pos + ":" + endPos + " parses to " + arg
 		if arg == null then break
 		result.args.push arg
 		if eval.nextTokIdx < endIdx then
@@ -2453,7 +2503,7 @@ Machine.runOneStatement = function(tokens, startTokenIndex)
 		end if
 		return nextStart
 	else
-		printErr "Unknown command: " + cmd
+		printErr "Unknown command: " + cmdName
 		return null
 	end if
 end function
