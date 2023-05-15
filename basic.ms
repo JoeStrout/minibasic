@@ -1874,66 +1874,68 @@ cmd.IF.parse = function(tokens, startIdx, endIdx)
 	end if
 	result.condition = Evaluator.make(tokens, startIdx+1, endIdx).parse
 	
-	// store where to go when condition is true
-	result.thenJumpTo = null	// line number to jump to, or...
-	result.thenNextPos = null	// token in this line to jump to
-	if tokens[endIdx+1] isa number then
-		result.thenJumpTo = tokens[endIdx+1]
-	else
-		result.thenNextPos = endIdx + 1
-	end if
-	
-	// figure out where to go when condition is false
-	result.elseJumpTo = null
-	result.elseNextPos = null
-	extraElses = 0
+	// Find the end of the "then" statement(s).  This will be the
+	// end of the line, or the "ELSE" token that matches up with
+	// our "THEN" token.
+	elsePos = tokens.len
 	i = endIdx + 1
+	extraElses = 0
 	while i < tokens.len
 		if tokens[i] == "THEN" then extraElses += 1
 		if tokens[i] == "ELSE" then
 			extraElses -= 1
 			if extraElses < 0 then
-				// Found it!  If followed by a number,
-				// treat it as a GoTo; otherwise jump to that statement.
-				if tokens[i+1] isa number then
-					result.elseJumpTo = tokens[i+1]
-					result.elseNextPos = 0
-				else
-					result.elseNextPos = i+1
-				end if
-				print "found ELSE at " + result.elseJumpTo + "," + result.elseNextPos
+				// Found it!
+				elsePos = i
+				print "found ELSE at " + elsePos
 				break
 			end if
 		end if
 		i += 1
 	end while
-	if result.elseJumpTo == null and result.elseNextPos == null then
-		// if we couldn't find a matching ELSE clause, then skip
-		// the rest of this line
-		result.elseNextPos = tokens.len
+	
+	// Now, handle two cases: if all we have between THEN and ELSE
+	// is a number, treat it as a GOTO; otherwise, parse one or more
+	// statements and store that as the THEN part.
+	result.thenCode = []
+	if elsePos == endIdx + 2 and tokens[endIdx+1] isa number then
+		result.thenCode.push Machine.compileStatement(["GOTO", tokens[endIdx+1]])
+	else
+		tokenIdx = endIdx + 1
+		while tokenIdx < elsePos
+			ast = Machine.compileStatement(tokens, tokenIdx)
+			result.thenCode.push ast
+			tokenIdx = ast.endTokenIdx + 1
+		end while
 	end if
+
+	// Now, if we have any more tokens, compile those as the ELSE code.
+	// (With the same shortcut of, a single numeric token implies GOTO.	
+	result.elseCode = []
+	if tokens.len == elsePos + 2 and tokens[elsePos+1] isa number then
+		result.elseCode.push Machine.compileStatement(["GOTO", tokens[elsePos+1]])
+	else
+		tokenIdx = elsePos + 1
+		while tokenIdx < tokens.len
+			ast = Machine.compileStatement(tokens, tokenIdx)
+			result.elseCode.push ast
+			tokenIdx = ast.endTokenIdx + 1
+		end while
+	end if
+	
+	// And we're done, we've parsed the entire line.
+	result.endTokenIdx = tokens.len
 	return result
 end function
 cmd.IF.run = function
 	value = self.condition.eval
+	machine.statementIdx = 0
 	if value != 0 then
-		// condition is true!  If THEN is followed by a number,
-		// treat it as a GoTo; otherwise jump to that statement.
-		machine.inThen = true
-		if self.thenJumpTo isa number then
-			machine.goTo self.thenJumpTo
-			return 0
-		else
-			return self.thenNextPos
-		end if
+		// condition is true! Execute the "then" code.
+		machine.runStatements self.thenCode
 	else
-		// condition is false!  Jump to the ELSE clause
-		if self.elseJumpTo isa number then
-			machine.goTo self.elseJumpTo
-			return 0
-		else
-			return self.elseNextPos
-		end if
+		// condition is false!  Execute the "else" code.
+		machine.runStatements self.elseCode
 	end if
 end function
 
@@ -2723,23 +2725,27 @@ Machine.doImmediate = function(tokens)
 	end while
 end function
 
-Machine.runOneLine = function
-	lineNum = self.lineNums[self.lineIdx]
-	if self.trace then print "#" + lineNum + " ", ""
-	code = self.code[lineNum]
+Machine.runStatements = function(code, lineNum)
+	if self.trace and lineNum >= 0 then print "#" + lineNum + " ", ""
 	if self.statementIdx == null then self.statementIdx = 0
 	self.nextLineIdx = null
 	while self.statementIdx < code.len
 		self.nextLineIdx = null
-		self.statementIdx = code[self.statementIdx].run
+		code[self.statementIdx].run
 		if controlCPressed then
 			cmd.BREAK.run
 			while controlCPressed; yield; end while
 		end if
 		if self.halt then return
 		if self.nextLineIdx != null then break
+		self.statementIdx = self.statementIdx + 1
 	end while
+end function
 
+Machine.runOneLine = function
+	lineNum = self.lineNums[self.lineIdx]
+	self.runStatements self.code[lineNum]
+	
 	if self.nextLineIdx == null then
 		self.lineIdx += 1
 		self.statementIdx = 0
@@ -2756,7 +2762,7 @@ end function
 // Return AST adorned with two additional values:
 //		startTokenIdx
 //		endTokenIdx
-Machine.compileStatement = function(tokens, startIdx)
+Machine.compileStatement = function(tokens, startIdx=0)
 	cmdName = tokens[startIdx]
 	if isIdentifier(cmdName) then
 		// check for the special case of an assignment statement without LET
