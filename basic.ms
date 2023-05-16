@@ -234,6 +234,26 @@ inputOrControlC = function(prompt="")
 end function
 
 //======================================================================
+// A little class to represent a "statement address" we can jump to
+// (i.e., a line and statement index within that line)
+//======================================================================
+Address = {}; Address._name = "Address"
+Address.lineIndex = 0
+Address.statementIndex = 0
+Address.make = function(lineIndex, statementIndex=0)
+	result = new Address
+	result.lineIndex = lineIndex
+	result.statementIndex = statementIndex
+	return result
+end function
+Address.next = function
+	return Address.make(self.lineIndex, self.statementIndex + 1)
+end function
+Address.str = function
+	return self.lineIndex + "#" + self.statementIndex
+end function
+
+//======================================================================
 // Lexer (i.e. tokenizer)
 //======================================================================
 
@@ -1012,10 +1032,12 @@ end function
 //======================================================================
 
 printErr = function(err)
+	addr = machine.address
 	loc = ""
-	if machine.lineIdx >= 0 and machine.lineNums.hasIndex(machine.lineIdx) and
-			machine.lineNums[machine.lineIdx] >= 0 then
-		loc = " in line " + machine.lineNums[machine.lineIdx]
+	if addr.lineIndex >= 0 and machine.lineNums.hasIndex(addr.lineIndex) and
+			machine.lineNums[addr.lineIndex] >= 0 then
+		loc = " in line " + machine.lineNums[addr.lineIndex]
+		if addr.statementIndex > 0 then loc += "(" + addr.statementIndex + ")"
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
@@ -1250,15 +1272,13 @@ ForLoopState = {}
 ForLoopState.var = ""
 ForLoopState.step = 1
 ForLoopState.limit = 0
-ForLoopState.topLineIdx = 0
-ForLoopState.topTokenIdx = 0
-ForLoopState.make = function(var, limit, step, topLine, topToken)
+ForLoopState.topAddress = null
+ForLoopState.make = function(var, limit, step, topAddress)
 	fls = new ForLoopState
 	fls.var = var.upper
 	fls.step = step
 	fls.limit = limit
-	fls.topLineIdx = topLine
-	fls.topTokenIdx = topToken
+	fls.topAddress = topAddress
 	return fls
 end function
 ForLoopState.done = function
@@ -1330,9 +1350,8 @@ Machine = {}
 Machine.program = {}		// key: line number; value: tokens
 Machine.programPath = ""	// where this path was stored on disk
 Machine.lineNums = []		// sorted list of line numbers
-Machine.lineIdx = 0			// index into lineNums for current line
-Machine.statementIdx = 0	// current statement in that line
-Machine.nextLineIdx = 0		// index into lineNum for next line (if defined)
+Machine.address = new Address		// current line/statement we're on
+Machine.nextAddress = new Address	// next line/statement to execute
 Machine.vars = {}			// key: identifier; value: value (scalars)
 Machine.arrs = {}			// same, but for arrays (lists)
 Machine.forLoops = []		// list of ForLoopState objects
@@ -1500,7 +1519,7 @@ Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 // (in alphabetical order below)
 
 Command = {}
-Command.parse = function(tokens, startIdx, endIdx)
+Command.parse = function(tokens, startIdx, endIdx, address)
 	// default parse expects no arguments, and just returns
 	// an instance of this command class.
 	if endIdx > startIdx+1 then return printErr("syntax error in " + 
@@ -1526,7 +1545,7 @@ cmd.BREAK.run = function(tokens, startIdx, endIdx)
 end function
 
 cmd.CD = new Command
-cmd.CD.parse = function(tokens, startIdx, endIdx)
+cmd.CD.parse = function(tokens, startIdx, endIdx, address)
 	args = tokens[startIdx+1:endIdx]
 	args.apply(@stripQuotes)
 	path = args.join("").trim
@@ -1545,7 +1564,7 @@ cmd.CLEAR.run = function
 end function
 
 cmd.COLOR = new Command
-cmd.COLOR.parse = function(tokens, startIdx, endIdx)
+cmd.COLOR.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.COLOR
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
 	return result
@@ -1561,7 +1580,7 @@ cmd.COLOR.run = function
 end function
 
 cmd.DATA = new Command
-cmd.DATA.parse = function(tokens, startIdx, endIdx)
+cmd.DATA.parse = function(tokens, startIdx, endIdx, address)
 	// As a command, this is a no-op.
 	return self
 end function
@@ -1592,7 +1611,7 @@ end function
 
 cmd.DIM = new Command
 cmd.DIM.redim = false
-cmd.DIM.parse = function(tokens, startIdx, endIdx)
+cmd.DIM.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.nameToDims = {}	// key: array name; value: array dimensions
 	if endIdx < startIdx + 2 then return printErr("incomplete DIM statement")
@@ -1657,7 +1676,7 @@ cmd.CAT = cmd.DIR		// CAT and CATALOG are aliases for DIR
 cmd.CATALOG = cmd.DIR
 
 cmd.CLOSE = new Command
-cmd.CLOSE.parse = function(tokens, startIdx, endIdx)
+cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
 	// ToDo: fix this after doing OPEN
 	return printErr("CLOSE not finished yet")
 	
@@ -1673,7 +1692,7 @@ cmd.CLOSE.parse = function(tokens, startIdx, endIdx)
 end function
 
 cmd.EDIT = new Command
-cmd.EDIT.parse = function(tokens, startIdx, endIdx)
+cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.EDIT
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
 	return result
@@ -1692,7 +1711,7 @@ cmd.EDIT.run = function
 end function
 
 cmd.ELLIPSE = new Command
-cmd.ELLIPSE.parse = function(tokens, startIdx, endIdx)
+cmd.ELLIPSE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
 	args = getDrawingArgs(tokens, startIdx+1)
 	if args == null then return printErr("syntax error in ELLIPSE")
@@ -1720,7 +1739,7 @@ end function
 cmd.STOP = cmd.END
 
 cmd.FILL = new Command
-cmd.FILL.parse = function(tokens, startIdx, endIdx)
+cmd.FILL.parse = function(tokens, startIdx, endIdx, address)
 	if tokens.len < startIdx + 1 then
 		return printErr("incomplete FILL statement")
 	end if
@@ -1733,7 +1752,7 @@ cmd.FILL.run = function
 end function
 
 cmd.FOR = new Command
-cmd.FOR.parse = function(tokens, startIdx, endIdx)
+cmd.FOR.parse = function(tokens, startIdx, endIdx, address)
 	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
 		return printErr("incomplete FOR statement")
 	end if
@@ -1751,21 +1770,17 @@ cmd.FOR.parse = function(tokens, startIdx, endIdx)
 		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
 		result.stepExpr = Evaluator.make(tokens, stepPos+1, endIdx).parse
 	end if
-	if endIdx + 1 < tokens.len then
-		result.lineIdx = machine.lineIdx; result.tokenIdx = endIdx + 1
-	else
-		result.lineIdx = machine.lineIdx + 1; result.tokenIdx = 0
-	end if	
+	result.address = address
 	return result
 end function
 cmd.FOR.run = function
 	machine.vars[self.var] = self.fromExpr.eval
 	machine.forLoops.push ForLoopState.make(self.var, 
-	  self.toExpr.eval, self.stepExpr.eval, self.lineIdx, self.tokenIdx)
+	  self.toExpr.eval, self.stepExpr.eval, self.address.next)
 end function
 
 cmd.GET = new Command
-cmd.GET.parse = function(tokens, startIdx, endIdx)
+cmd.GET.parse = function(tokens, startIdx, endIdx, address)
 	// ToDo: deal with file #
 	fileAndPos = getFile(tokens, startIdx)
 	if fileAndPos == null then return
@@ -1793,7 +1808,7 @@ end function
 cmd[new "GET#"] = cmd.GET
 
 cmd.GOSUB = new Command
-cmd.GOSUB.parse = function(tokens, startIdx, endIdx)
+cmd.GOSUB.parse = function(tokens, startIdx, endIdx, address)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOSUB")
 	end if
@@ -1815,7 +1830,7 @@ cmd.GOSUB.run = function
 end function
 
 cmd.GOTO = new Command
-cmd.GOTO.parse = function(tokens, startIdx, endIdx)
+cmd.GOTO.parse = function(tokens, startIdx, endIdx, address)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOTO")
 	end if
@@ -1841,7 +1856,7 @@ end function
 cmd.CLS = cmd.HOME		// CLS is an alias for HOME
 
 cmd.HTAB = new Command
-cmd.HTAB.parse = function(tokens, startIdx, endIdx)
+cmd.HTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
 	return result
@@ -1851,7 +1866,7 @@ cmd.HTAB.run = function
 end function
 
 cmd.IF = new Command
-cmd.IF.parse = function(tokens, startIdx, endIdx)
+cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	// This seems like a very tricky case, because of multiple statements
 	// per THEN and ELSE clause, and the possibility of nested IF-THEN-ELSE
 	// statements.  But it's not so bad.  The rules are:
@@ -1860,9 +1875,9 @@ cmd.IF.parse = function(tokens, startIdx, endIdx)
 	//  2. If the condition is false, then find the matching ELSE
 	//	   token, discounting as many ELSEs as we see THENs on the way.
 
-	// ToDo: refactor this to compile the whole tree, ignoring endIdx
-	// and grabbing more of the tokens as needed (and updating endTokenIdx
-	// on our result accordingly).
+	// ToDo: refactor this to NOT grab the whole tree, but just make
+	// use of then/else addresses as before, just to be consistent with
+	// how we manage FOR/NEXT, etc.
 
 	result = new self
 	
@@ -1940,7 +1955,7 @@ cmd.IF.run = function
 end function
 
 cmd.IMAGE = new Command
-cmd.IMAGE.parse = function(tokens, startIdx, endIdx)
+cmd.IMAGE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+2 >= endIdx then return printErr("incomplete IMAGE statement")
 	commaPos = tokens.indexOfAnyParenSavvy([",", "TO"], startIdx+1, endIdx, endIdx)
 	result = new self
@@ -1976,7 +1991,7 @@ cmd.IMAGE.run = function
 end function
 
 cmd.INPUT = new Command
-cmd.INPUT.parse = function(tokens, startIdx, endIdx)
+cmd.INPUT.parse = function(tokens, startIdx, endIdx, address)
 	// Another quirky function (http://basic4all.epizy.com/index.php?topic=372).
 	// Our version:
 	//		- prints "?" if no prompt, or if prompt is followed by ";"
@@ -2058,7 +2073,7 @@ end function
 cmd["INPUT#"] = @cmd.INPUT
 
 cmd.LET = new Command
-cmd.LET.parse = function(tokens, startIdx, endIdx)
+cmd.LET.parse = function(tokens, startIdx, endIdx, address)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
 	result = new cmd.LET
 	varEndPos = startIdx + 1
@@ -2078,7 +2093,7 @@ cmd.LET.run = function
 end function
 
 cmd.LINE = new Command
-cmd.LINE.parse = function(tokens, startIdx, endIdx)
+cmd.LINE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete LINE statement")
 	result = new self
 	result.args = getDrawingArgs(tokens, startIdx+1)
@@ -2098,7 +2113,7 @@ end function
 
 cmd.LIST = new Command
 cmd.LIST.remOnly = false
-cmd.LIST.parse = function(tokens, startIdx, endIdx)
+cmd.LIST.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.range = getRange(tokens[startIdx+1:endIdx])
 	return result
@@ -2111,7 +2126,7 @@ cmd.LISTREM = new cmd.LIST
 cmd.LISTREM.remOnly = true
 
 cmd.LOAD = new Command
-cmd.LOAD.parse = function(tokens, startIdx, endIdx)
+cmd.LOAD.parse = function(tokens, startIdx, endIdx, address)
 	// like DIR, this command is special; it can't take a variable
 	// as an argument, but you don't need to use quotation marks.
 	result = new self
@@ -2136,7 +2151,7 @@ cmd.LOAD.run = function
 end function
 
 cmd.NEXT = new Command
-cmd.NEXT.parse = function(tokens, startIdx, endIdx)
+cmd.NEXT.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.NEXT
 	result.args = tokens[startIdx+1:endIdx]
 	result.args.removeVal ",", true
@@ -2144,8 +2159,8 @@ cmd.NEXT.parse = function(tokens, startIdx, endIdx)
 end function
 cmd.NEXT.run = function
 	// find a list of FOR loop variables to consider
-	if not machine.forLoops then return printErr("NEXT without FOR")
 	args = self.args
+	if not machine.forLoops then return printErr("NEXT without FOR")
 	if not args then
 		// (...if none is given, then pick the most recent one)
 		args = [machine.forLoops[-1].var]
@@ -2166,8 +2181,8 @@ cmd.NEXT.run = function
 			continue
 		end if
 		// this one is not done; send machine to the top of the loop
-		machine.nextLineIdx = fls.topLineIdx
-		return fls.topTokenIdx
+		machine.jumpTo fls.topAddress
+		break
 	end for
 end function
 
@@ -2177,7 +2192,7 @@ cmd.NEW.run = function
 end function
 
 cmd.ON = new Command
-cmd.ON.parse = function(tokens, startIdx, endIdx)
+cmd.ON.parse = function(tokens, startIdx, endIdx, address)
 	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx, endIdx, endIdx)
 	if goPos == endIdx then return printErr("Incomplete ON statement")
 	result = new self
@@ -2229,7 +2244,7 @@ Machine.cmd.OPEN = function(tokens, startIdx, endIdx)
 end function
 
 cmd.PEN = new Command
-cmd.PEN.parse = function(tokens, startIdx, endIdx)
+cmd.PEN.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, endIdx)
 	if result.args.len != 1 then return printErr("invalid arguments to PEN")
@@ -2243,7 +2258,7 @@ cmd.PEN.run = function
 end function
 
 cmd.PLOT = new Command
-cmd.PLOT.parse = function(tokens, startIdx, endIdx)
+cmd.PLOT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, true)
 	if result.args.len != 2 then return printErr("invalid arguments to PLOT")
@@ -2280,7 +2295,7 @@ cmd.PLOT.run = function
 end function
 
 cmd.POLY = new Command
-cmd.POLY.parse = function(tokens, startIdx, endIdx)
+cmd.POLY.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, true)
 	if result.args.len != 2 then return printErr("invalid arguments to POLY")
@@ -2305,7 +2320,7 @@ cmd.POLY.run = function
 end function
 
 cmd.PRINT = new Command
-cmd.PRINT.parse = function(tokens, startIdx, endIdx)
+cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 	// print a series of expressions, separated by , or ; or even just whitespace.
 	result = new cmd.PRINT
 	result.args = []
@@ -2365,7 +2380,7 @@ cmd.PWD.run = function
 end function
 
 cmd.READ = new Command
-cmd.READ.parse = function(tokens, startIdx, endIdx)
+cmd.READ.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.lvars = []
 	pos = startIdx + 1
@@ -2395,7 +2410,7 @@ cmd.READ.run = function
 end function
 
 cmd.RECT = new Command
-cmd.RECT.parse = function(tokens, startIdx, endIdx)
+cmd.RECT.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete RECT statement")
 	result = new self
 	result.args = getDrawingArgs(tokens, startIdx+1)
@@ -2419,13 +2434,13 @@ cmd.REDIM = new cmd.DIM
 cmd.REDIM.redim = true
 
 cmd.REM = new Command
-cmd.REM.parse = function(tokens, startIdx, endIdx)
+cmd.REM.parse = function(tokens, startIdx, endIdx, address)
 	// no-op
 	return self
 end function
 
 cmd.RENUMBER = new Command
-cmd.RENUMBER.parse = function(tokens, startIdx, endIdx)
+cmd.RENUMBER.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	toPos = tokens.indexOf("TO")
 	if toPos == null or toPos >= endIdx-1 then return printErr("incomplete RENUMBER command")
@@ -2510,7 +2525,7 @@ cmd.RENUMBER.run = function
 end function
 
 cmd.RESTORE = new Command
-cmd.RESTORE.parse = function(tokens, startIdx, endIdx)
+cmd.RESTORE.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1)
 	return result
@@ -2544,17 +2559,17 @@ cmd.RETURN = new Command
 cmd.RETURN.run = function
 	if not machine.returnStack then return printErr("RETURN without GOSUB")
 	returnTo = machine.returnStack.pop
-	machine.nextLineIdx = returnTo.lineIdx
-	return returnTo.tokenIdx
+	machine.jumpTo returnTo
 end function
 
 cmd.RUN = new Command
 cmd.RUN.run = function
-	machine.runProgram
+	machine.halt = true
+	machine.doRunRunRun = true
 end function
 
 cmd.SAVE = new Command
-cmd.SAVE.parse = function(tokens, startIdx, endIdx)
+cmd.SAVE.parse = function(tokens, startIdx, endIdx, address)
 	// like DIR and LOAD, the SAVE command takes a path
 	// without quotation marks (and so cannot use an expression)
 	result = new self
@@ -2586,7 +2601,7 @@ cmd.SAVE.run = function
 end function
 
 cmd.SOUND = new Command
-cmd.SOUND.parse = function(tokens, startIdx, endIdx)
+cmd.SOUND.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx + 1, true)
 	if result.args.len > 4 then return printErr("invalid arguments to SOUND command")
@@ -2644,7 +2659,7 @@ cmd.SOUND.run = function
 end function
 
 cmd.VTAB = new Command
-cmd.VTAB.parse = function(tokens, startIdx, endIdx)
+cmd.VTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.arg = Evaluator.make(tokens,startIdx+1, endIdx).parse
 	return result
@@ -2655,7 +2670,7 @@ end function
 
 cmd.WAIT = new Command
 cmd.WAIT.duration = SNLiteral.one
-cmd.WAIT.parse = function(tokens, startIdx, endIdx)
+cmd.WAIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	if startIdx+1 < endIdx then
 		result.duration = Evaluator.make(tokens, startIdx+1, endIdx).parse
@@ -2719,50 +2734,34 @@ Machine.doImmediate = function(tokens)
 	self.tokenIdx = 0
 	self.lineIdx = null
 	while not self.halt and self.tokenIdx < tokens.len
-		self.nextLineIdx = null
+		self.nextAddress = null
+		// ToDo: fix this!
 		self.tokenIdx = self.runOneStatement(tokens, self.tokenIdx)
-		if self.lineIdx != null or self.nextLineIdx != null then break
+		if self.lineIdx != null or self.nextAddress != null then break
 	end while
 end function
 
-Machine.runStatements = function(code, lineNum)
-	if self.trace and lineNum >= 0 then print "#" + lineNum + " ", ""
-	if self.statementIdx == null then self.statementIdx = 0
-	self.nextLineIdx = null
-	while self.statementIdx < code.len
-		self.nextLineIdx = null
-		code[self.statementIdx].run
-		if controlCPressed then
-			cmd.BREAK.run
-			while controlCPressed; yield; end while
-		end if
-		if self.halt then return
-		if self.nextLineIdx != null then break
-		self.statementIdx = self.statementIdx + 1
-	end while
-end function
-
-Machine.runOneLine = function
-	lineNum = self.lineNums[self.lineIdx]
-	self.runStatements self.code[lineNum]
-	
-	if self.nextLineIdx == null then
-		self.lineIdx += 1
-		self.statementIdx = 0
-		if self.lineIdx >= self.lineNums.len then return
-//		print "Advancing to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx]
-	else
-		self.lineIdx = self.nextLineIdx
-//		print "Jumping to line index " + self.lineIdx + ", which is " + self.lineNums[self.lineIdx] +
-//		 ", at token " + self.tokenIdx
-	end if
-end function
+//Machine.runStatements = function(code, lineNum)
+//	if self.trace and lineNum >= 0 then print "#" + lineNum + " ", ""
+//	self.address.statementIndex = 0
+//	while self.address.statementIndex < code.len
+//		self.nextAddress = null
+//		code[self.statementIdx].run
+//		if controlCPressed then
+//			cmd.BREAK.run
+//			while controlCPressed; yield; end while
+//		end if
+//		if self.halt then return
+//		if self.nextAddress != null then break
+//		self.address.statementIndex += 1
+//	end while
+//end function
 
 // Compile one statement in the given set of tokens.
 // Return AST adorned with two additional values:
 //		startTokenIdx
 //		endTokenIdx
-Machine.compileStatement = function(tokens, startIdx=0)
+Machine.compileStatement = function(tokens, startIdx, address)
 	cmdName = tokens[startIdx]
 	if isIdentifier(cmdName) then
 		// check for the special case of an assignment statement without LET
@@ -2780,7 +2779,7 @@ Machine.compileStatement = function(tokens, startIdx=0)
 		print "Command not found: " + cmdName + " in line " + lineNum
 		return null
 	end if
-	result = cmdObj.parse(tokens, startIdx, statementEnd)
+	result = cmdObj.parse(tokens, startIdx, statementEnd, address)
 	result.startTokenIdx = startIdx
 	if not result.hasIndex("endTokenIdx") then result.endTokenIdx = statementEnd
 	return result
@@ -2788,14 +2787,17 @@ end function
 
 Machine.compile = function
 	self.code = {}  // key: line number; value: list of parse trees (one per statement)
-	for lineNum in self.program.indexes
+	for i in self.lineNums.indexes
+		lineNum = self.lineNums[i]
 		self.code[lineNum] = []
 		tokens = self.program[lineNum]
 		tokenIdx = 0
+		statementIdx = 0
 		while tokenIdx < tokens.len
-			ast = Machine.compileStatement(tokens, tokenIdx)
+			ast = Machine.compileStatement(tokens, tokenIdx, Address.make(i, statementIdx))
 			self.code[lineNum].push ast
 			tokenIdx = ast.endTokenIdx + 1
+			statementIdx += 1
 		end while
 	end for
 end function
@@ -2806,17 +2808,56 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	if clearData then self.findData
 	self.halt = false
 	self.inThen = false
-	self.lineIdx = 0
-	self.tokenIdx = 0
+	self.address = new Address
+	self.nextAddress = null
 	if not self.lineNums then return
 	self.compile
 	if self.halt then return
-	while self.lineIdx < self.lineNums.len and self.lineNums[self.lineIdx] < startLineNum
-		self.lineIdx += 1
+	while self.address.lineIndex < self.lineNums.len and self.lineNums[self.address.lineIndex] < startLineNum
+		self.address.lineIndex += 1
 	end while
-	while not self.halt and self.lineIdx < self.lineNums.len
+	while not self.halt
 		self.runOneLine
 	end while
+end function
+
+// Execute all the statements in the current line, returning when
+// we run out of statements or when some command jumps us to a
+// different address.  End by updating self.address to the next
+// address to be executed.
+Machine.runOneLine = function
+	addr = self.address
+	if addr.lineIndex < 0 or addr.lineIndex >= self.lineNums.len then
+		self.halt = true
+		return
+	end if
+	lineNum = self.lineNums[addr.lineIndex]
+	code = self.code[lineNum]
+
+	while addr.statementIndex < code.len	
+		if self.trace and lineNum >= 0 then print addr.str
+		self.nextAddress = null
+		code[addr.statementIndex].run
+		if controlCPressed then
+			cmd.BREAK.run
+			while controlCPressed; yield; end while
+		end if
+		if self.halt then return
+		if self.nextAddress != null then break
+		addr.statementIndex += 1
+	end while
+	
+	if self.nextAddress == null then
+		addr.lineIndex += 1
+		addr.statementIndex = 0
+	else
+		addr.lineIndex = self.nextAddress.lineIndex
+		addr.statementIndex = self.nextAddress.statementIndex
+		if addr.statementIndex >= self.code[self.lineNums[addr.lineIndex]].len then
+			addr.lineIndex += 1
+			addr.statementIndex = 0
+		end if
+	end if
 end function
 
 Machine.sortLines = function
@@ -2875,11 +2916,18 @@ Machine.findComeFroms = function
 end function
 
 Machine.goTo = function(lineNum)
-	self.nextLineIdx = self.lineNums.indexOf(lineNum)
-	if self.nextLineIdx == null then
+	lineIdx = self.lineNums.indexOf(lineNum)
+	if lineIdx == null then
 		printErr "Invalid line number: " + lineNum
+		self.halt
+	else
+		self.nextAddress = Address.make(lineIdx)
 	end if
 	return 0
+end function
+
+Machine.jumpTo = function(address)
+	self.nextAddress = address
 end function
 
 machine = new Machine
@@ -2969,6 +3017,7 @@ runMainLoop = function
 	// Main loop (invoking the REPL until done)
 	while true
 		if text.column > 0 then print
+		machine.doRunRunRun = false
 		line = inputOrControlC(">")
 		if line == char(3) then
 			print "BREAK"
@@ -2978,6 +3027,7 @@ runMainLoop = function
 		end if
 		if line.lower == "exit" then break
 		repl line
+		if machine.doRunRunRun then machine.runProgram
 	end while
 	
 	print "Exiting MiniBASIC."
