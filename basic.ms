@@ -1710,6 +1710,16 @@ cmd.EDIT.run = function
 	end if
 end function
 
+cmd.ELSE = new Command
+cmd.ELSE.parse = function(tokens, startIdx, endIdx, address)
+	result = new cmd.ELSE
+	result.jumpToAddress = Address.make(address.lineIndex+1)
+	return result
+end function
+cmd.ELSE.run = function
+	machine.jumpTo self.jumpToAddress
+end function
+
 cmd.ELLIPSE = new Command
 cmd.ELLIPSE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
@@ -1875,10 +1885,6 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	//  2. If the condition is false, then find the matching ELSE
 	//	   token, discounting as many ELSEs as we see THENs on the way.
 
-	// ToDo: refactor this to NOT grab the whole tree, but just make
-	// use of then/else addresses as before, just to be consistent with
-	// how we manage FOR/NEXT, etc.
-
 	result = new self
 	
 	if endIdx >= tokens.len or tokens[endIdx] != "THEN" then	
@@ -1888,6 +1894,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 		return printErr("incomplete THEN clause")
 	end if
 	result.condition = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.endTokenIdx = endIdx
 	
 	// Find the end of the "then" statement(s).  This will be the
 	// end of the line, or the "ELSE" token that matches up with
@@ -1902,7 +1909,6 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 			if extraElses < 0 then
 				// Found it!
 				elsePos = i
-				print "found ELSE at " + elsePos
 				break
 			end if
 		end if
@@ -1910,47 +1916,53 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	end while
 	
 	// Now, handle two cases: if all we have between THEN and ELSE
-	// is a number, treat it as a GOTO; otherwise, parse one or more
-	// statements and store that as the THEN part.
-	result.thenCode = []
+	// is a number, treat it as a GOTO; otherwise, it's a statement
+	// we should jump to.
 	if elsePos == endIdx + 2 and tokens[endIdx+1] isa number then
-		result.thenCode.push Machine.compileStatement(["GOTO", tokens[endIdx+1]])
+		result.thenJumpTo = Address.make(machine.lineNums.indexOf(tokens[endIdx+1]))
 	else
-		tokenIdx = endIdx + 1
-		while tokenIdx < elsePos
-			ast = Machine.compileStatement(tokens, tokenIdx)
-			result.thenCode.push ast
-			tokenIdx = ast.endTokenIdx + 1
-		end while
+		result.thenJumpTo = address.next
 	end if
 
-	// Now, if we have any more tokens, compile those as the ELSE code.
-	// (With the same shortcut of, a single numeric token implies GOTO.	
-	result.elseCode = []
-	if tokens.len == elsePos + 2 and tokens[elsePos+1] isa number then
-		result.elseCode.push Machine.compileStatement(["GOTO", tokens[elsePos+1]])
-	else
-		tokenIdx = elsePos + 1
-		while tokenIdx < tokens.len
-			ast = Machine.compileStatement(tokens, tokenIdx)
-			result.elseCode.push ast
-			tokenIdx = ast.endTokenIdx + 1
-		end while
-	end if
-	
-	// And we're done, we've parsed the entire line.
-	result.endTokenIdx = tokens.len
+	// Now, find the matching ELSE clause to jump to if the condition is false.
+	extraElses = 0
+	statementIdx = address.statementIndex + 1
+	i = endIdx + 1
+	result.elseJumpTo = Address.make(address.lineIndex+1)
+	while i < tokens.len
+		if tokens[i] == "THEN" then
+			extraElses += 1
+			statementIdx += 1
+		else if tokens[i] == "ELSE" then
+			statementIdx += 1
+			extraElses -= 1
+			if extraElses < 0 then
+				// Found it!  If followed by a number,
+				// treat it as a GoTo; otherwise jump to that statement.
+				if tokens[i+1] isa number then
+					result.elseJumpTo = Address.make(machine.lineNums.indexOf(tokens[i+1]))
+				else
+					result.elseJumpTo = Address.make(address.lineIndex, statementIdx+1)
+				end if
+				break
+			end if
+			statementIdx += 1
+		else if tokens[i] == ":" then
+			statementIdx += 1
+		end if
+		i += 1
+	end while
 	return result
 end function
 cmd.IF.run = function
 	value = self.condition.eval
 	machine.statementIdx = 0
 	if value != 0 then
-		// condition is true! Execute the "then" code.
-		machine.runStatements self.thenCode
+		// condition is true! Jump to the "then" address
+		machine.jumpTo self.thenJumpTo
 	else
-		// condition is false!  Execute the "else" code.
-		machine.runStatements self.elseCode
+		// condition is false!  Jump to the "else" address
+		machine.jumpTo self.elseJumpTo
 	end if
 end function
 
@@ -2793,9 +2805,20 @@ Machine.compile = function
 		tokens = self.program[lineNum]
 		tokenIdx = 0
 		statementIdx = 0
+		openIf = 0
 		while tokenIdx < tokens.len
 			ast = Machine.compileStatement(tokens, tokenIdx, Address.make(i, statementIdx))
 			self.code[lineNum].push ast
+			if ast isa cmd.IF then openIf += 1
+			if ast isa cmd.ELSE then
+				if not openIf then return printErr("Unexpected ELSE")
+			end if
+			if ast.endTokenIdx < tokens.len and tokens[ast.endTokenIdx] == "ELSE" then
+				// parse "ELSE" as a statement of its own, even if not preceded by ':'
+				if not openIf then return printErr("Unexpected ELSE")
+				self.code[lineNum].push cmd.ELSE.parse(tokens, ast.endTokenIdx, ast.endTokenIdx, Address.make(i))
+				statementIdx += 1
+			end if
 			tokenIdx = ast.endTokenIdx + 1
 			statementIdx += 1
 		end while
@@ -2853,7 +2876,8 @@ Machine.runOneLine = function
 	else
 		addr.lineIndex = self.nextAddress.lineIndex
 		addr.statementIndex = self.nextAddress.statementIndex
-		if addr.statementIndex >= self.code[self.lineNums[addr.lineIndex]].len then
+		if addr.lineIndex < self.lineNums.len and 
+		   addr.statementIndex >= self.code[self.lineNums[addr.lineIndex]].len then
 			addr.lineIndex += 1
 			addr.statementIndex = 0
 		end if
@@ -3003,7 +3027,7 @@ runMainLoop = function
 	cmd.HOME.run
 	runUnitTests
 
-	print "MiniBASIC 0.9.5"
+	print "MiniBASIC 0.9.6"
 
 	globals.basic = function
 		reset
