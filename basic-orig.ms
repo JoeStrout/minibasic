@@ -1299,6 +1299,11 @@ Machine.fn.TAB = function(n)
 	return ""
 end function
 Machine.fn.TAN = function(n); if requireNum(n) then return tan(n); end function
+Machine.fn.TIME = function(n)
+	requireNum n
+	if n % 2 then return time - machine.timeAtRun
+	return time - machine.timeAtStart
+end function
 Machine.fn["UPPER$"] = function(s); if requireStr(s) then return upper(s); end function
 Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 
@@ -2287,6 +2292,7 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	self.inThen = false
 	self.lineIdx = 0
 	self.tokenIdx = 0
+	self.timeAtRun = time
 	if not self.lineNums then return
 	while self.lineIdx < self.lineNums.len and self.lineNums[self.lineIdx] < startLineNum
 		self.lineIdx += 1
@@ -2360,6 +2366,7 @@ Machine.goTo = function(lineNum)
 end function
 
 machine = new Machine
+machine.timeAtStart = time
 
 //======================================================================
 // Unit Tests.

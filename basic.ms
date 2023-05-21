@@ -392,7 +392,7 @@ end function
 
 SNLiteral = new SyntaxNode
 SNLiteral.value = null	// number or string, or null
-SNLiteral.eval = function; return self.value; end function
+SNLiteral.eval = function(customLocals); return self.value; end function
 SNLiteral.str = function; return super.str + "(" + self.toCode + ")"; end function
 SNLiteral.toCode = function
 	if self.value isa number then return str(self.value)
@@ -409,7 +409,7 @@ SNLiteral.one = SNLiteral.make(1)
 
 SNIdentifier = new SyntaxNode
 SNIdentifier.ident = ""   // actual identifier, e.g. "X"
-SNIdentifier.eval = function; return getValue(self.ident); end function
+SNIdentifier.eval = function(customLocals); return getValue(self.ident, customLocals); end function
 SNIdentifier.str = function; return self.ident.upper; end function
 SNIdentifier.toCode = @SNIdentifier.str
 SNIdentifier.make = function(ident)
@@ -432,94 +432,94 @@ SNBinop.make = function(class, a, op, b)
 end function
 
 SNAdd = new SNBinop
-SNAdd.eval = function; return self.lhs.eval + self.rhs.eval; end function
+SNAdd.eval = function(c); return self.lhs.eval(c) + self.rhs.eval(c); end function
 SNAdd.make = function(a,b); return SNBinop.make(SNAdd, a, "+", b); end function
 
 SNMult = new SNBinop
-SNMult.eval = function; return self.lhs.eval * self.rhs.eval; end function
+SNMult.eval = function(c); return self.lhs.eval(c) * self.rhs.eval(c); end function
 SNMult.make = function(a,b); return SNBinop.make(SNMult, a, "*", b); end function
 
 SNSub = new SNBinop
-SNSub.eval = function; return self.lhs.eval - self.rhs.eval; end function
+SNSub.eval = function(c); return self.lhs.eval(c) - self.rhs.eval(c); end function
 SNSub.make = function(a,b); return SNBinop.make(SNSub, a, "-", b); end function
 
 SNDiv = new SNBinop
-SNDiv.eval = function; return self.lhs.eval / self.rhs.eval; end function
+SNDiv.eval = function(c); return self.lhs.eval(c) / self.rhs.eval(c); end function
 SNDiv.make = function(a,b); return SNBinop.make(SNDiv, a, "/", b); end function
 
 SNIDiv = new SNBinop
-SNIDiv.eval = function; return int(int(self.lhs.eval) / int(self.rhs.eval)); end function
+SNIDiv.eval = function(c); return int(int(self.lhs.eval) / int(self.rhs.eval)); end function
 SNIDiv.make = function(a,b); return SNBinop.make(SNIDiv, a, "\", b); end function
 
 SNMod = new SNBinop
-SNMod.eval = function; return self.lhs.eval % self.rhs.eval; end function
+SNMod.eval = function(c); return self.lhs.eval(c) % self.rhs.eval(c); end function
 SNMod.make = function(a,b); return SNBinop.make(SNMod, a, "%", b); end function
 
 SNPow = new SNBinop;
-SNPow.eval = function; return self.lhs.eval ^ self.rhs.eval; end function
+SNPow.eval = function(c); return self.lhs.eval(c) ^ self.rhs.eval(c); end function
 SNPow.make = function(a,b); return SNBinop.make(SNPow, a, "^", b); end function
 
 SNEq = new SNBinop
-SNEq.eval = function; return self.lhs.eval == self.rhs.eval; end function
+SNEq.eval = function(c); return self.lhs.eval(c) == self.rhs.eval(c); end function
 SNEq.make = function(a,b); return SNBinop.make(SNEq, a, "=", b); end function
 
 SNNotEq = new SNBinop
-SNNotEq.eval = function; return self.lhs.eval != self.rhs.eval; end function
+SNNotEq.eval = function(c); return self.lhs.eval(c) != self.rhs.eval(c); end function
 SNNotEq.make = function(a,b); return SNBinop.make(SNNotEq, a, "<>", b); end function
 
 SNLT = new SNBinop
-SNLT.eval = function; return self.lhs.eval < self.rhs.eval; end function
+SNLT.eval = function(c); return self.lhs.eval(c) < self.rhs.eval(c); end function
 SNLT.make = function(a,b); return SNBinop.make(SNLT, a, "<", b); end function
 
 SNGT = new SNBinop
-SNGT.eval = function; return self.lhs.eval > self.rhs.eval; end function
+SNGT.eval = function(c); return self.lhs.eval(c) > self.rhs.eval(c); end function
 SNGT.make = function(a,b); return SNBinop.make(SNGT, a, ">", b); end function
 
 SNLE = new SNBinop
-SNLE.eval = function; return self.lhs.eval <= self.rhs.eval; end function
+SNLE.eval = function(c); return self.lhs.eval(c) <= self.rhs.eval(c); end function
 SNLE.make = function(a,b); return SNBinop.make(SNLE, a, "<=", b); end function
 
 SNGE = new SNBinop
-SNGE.eval = function; return self.lhs.eval >= self.rhs.eval; end function
+SNGE.eval = function(c); return self.lhs.eval(c) >= self.rhs.eval(c); end function
 SNGE.make = function(a,b); return SNBinop.make(SNGE, a, ">=", b); end function
 
 SNEQV = new SNBinop
-SNEQV.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
+SNEQV.eval = function(c)
+	opA = self.lhs.eval(c); opB = self.rhs.eval
 	return (opA != 0) == (opB != 0)
 end function
 SNEQV.make = function(a,b); return SNBinop.make(SNEQV, a, "EQV", b); end function
 
 SNIMP = new SNBinop
-SNIMP.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
+SNIMP.eval = function(c)
+	opA = self.lhs.eval(c); opB = self.rhs.eval
 	return (opA == 0) or (opA != 0 and opB != 0)
 end function
 SNIMP.make = function(a,b); return SNBinop.make(SNIMP, a, "IMP", b); end function
 
 SNXOR = new SNBinop
-SNXOR.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
+SNXOR.eval = function(c)
+	opA = self.lhs.eval(c); opB = self.rhs.eval
 	return (opA == 0) != (opB == 0)
 end function
 SNXOR.make = function(a,b); return SNBinop.make(SNXOR, a, "XOR", b); end function
 
 SNOR = new SNBinop
-SNOR.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
+SNOR.eval = function(c)
+	opA = self.lhs.eval(c); opB = self.rhs.eval
 	return (opA != 0) or (opB != 0)
 end function
 SNOR.make = function(a,b); return SNBinop.make(SNOR, a, "OR", b); end function
 
 SNAND = new SNBinop
-SNAND.eval = function
-	opA = self.lhs.eval; opB = self.rhs.eval
+SNAND.eval = function(c)
+	opA = self.lhs.eval(c); opB = self.rhs.eval
 	return (opA != 0) and (opB != 0)
 end function
 SNAND.make = function(a,b); return SNBinop.make(SNAND, a, "AND", b); end function
 
 SNNOT = new SyntaxNode
-SNNOT.eval = function
+SNNOT.eval = function(c)
 	opA = self.operand.eval
 	return not (opA != 0)
 end function
@@ -534,14 +534,19 @@ end function
 
 SNArrayOrCall = new SyntaxNode
 SNArrayOrCall.allowArrayRefs = false
-SNArrayOrCall.eval = function
+SNArrayOrCall.eval = function(c)
 	Evaluator.debugPrint "Evaluating a call: " + self.name
 	funcOrArrayName = self.name
 	args = []
-	for n in self.args; args.push n.eval; end for
+	for n in self.args; args.push n.eval(c); end for
 	f = machine.fn.get(funcOrArrayName)
 	array = machine.arrs.get(funcOrArrayName)
 	if @f == null and array == null then
+		// Make sure the user isn't trying an invalid custom FN.
+		if funcOrArrayName.len > 2 and funcOrArrayName[:2] == "FN" then
+			printErr "Unknown custom function:" + funcOrArrayName
+			return
+		end if
 		// old-BASIC quirk: even arrays exist automatically, as soon as they are
 		// referenced, with 1 dimension and a size of 10.
 		if isNumericId(funcOrArrayName) then array = [0]*11 else array = [""]*11
@@ -576,6 +581,10 @@ SNArrayOrCall.str = function
 end function
 SNArrayOrCall.make = function(name, indexNodes, allowArrayRefs=false)
 	result = new SNArrayOrCall
+	if name.len > 2 and name[:2] == "FN" and name[2] != " " then
+		// normalize, e.g., FNSQ --> FN SQ
+		name = "FN " + name[2:]
+	end if
 	result.name = name
 	result.args = indexNodes
 	if allowArrayRefs then result.allowArrayRefs = true
@@ -813,7 +822,7 @@ end function
 
 // parse: evaluate a tokenized expression, returning a SyntaxNode that
 // represents its whole parse tree.
-Evaluator.parse = function(customLocals=null)
+Evaluator.parse = function()
 	self.debugPrint "Evaluator.parse(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
 	self.stack = []
 	canBail = false	// marks points where we can bail out if we start a new value
@@ -929,8 +938,9 @@ end function
 // evaluate: evaluate a tokenized expression, all the way to a value.
 //  For example, given [6, "*", 7], return 42.
 Evaluator.evaluate = function(customLocals=null)
+	machine.halt = false
 	parseTree = self.parse
-	if parseTree then return parseTree.eval
+	if parseTree then return parseTree.eval(customLocals)
 end function
 // Evaluate the given string of tokens, which should comprise a single expression.
 evalTokens = function(tokens, customLocals=null)
@@ -1049,9 +1059,11 @@ printErr = function(err)
 //	pprint stackTrace; exit
 end function
 
-getValue = function(identifier)
+getValue = function(identifier, customLocals=null)
 	upperId = identifier.upper
-	if machine.vars.hasIndex(upperId) then
+	if customLocals and customLocals.hasIndex(upperId) then
+		return customLocals[upperId]
+	else if machine.vars.hasIndex(upperId) then
 		return machine.vars[upperId]
 	else if identifier.len < 3 then
 		if isNumericId(identifier) then return 0 else return ""
@@ -1506,6 +1518,11 @@ Machine.fn.TAB = function(n)
 	return ""
 end function
 Machine.fn.TAN = function(n); if requireNum(n) then return tan(n); end function
+Machine.fn.TIME = function(n)
+	requireNum n
+	if n % 2 then return time - machine.timeAtRun
+	return time - machine.timeAtStart
+end function
 Machine.fn["UPPER$"] = function(s); if requireStr(s) then return upper(s); end function
 Machine.fn.VAL = function(s); if requireStr(s) then return val(s); end function
 
@@ -1587,8 +1604,9 @@ cmd.DATA.parse = function(tokens, startIdx, endIdx, address)
 	return new cmd.DATA
 end function
 
-// ToDo:
-Machine.cmd.DEF = function(tokens, startIdx, endIdx)
+cmd.DEF = new Command; cmd.DEF._name = "cmd.DEF"
+cmd.DEF.parse = function(tokens, startIdx, endIdx, address)
+	result = new cmd.DEF
 	startIdx += 1	// skip DEF
 	// grab the function name and dummy argument
 	varEndPos = startIdx + 1
@@ -1596,16 +1614,21 @@ Machine.cmd.DEF = function(tokens, startIdx, endIdx)
 		varEndPos = tokens.findCloseParen(startIdx+1, endIdx) + 1
 		if varEndPos == null then return printErr("unmatched parentheses")
 	end if
-	lvar = Lvar.make(tokens, startIdx, varEndPos, true)
-	if lvar == null then return
-	if not lvar.isArrayElem then return printErr("user function requires 1 argument")
+	result.lvar = Lvar.make(tokens, startIdx, varEndPos, true)
+	if result.lvar == null then return
+	if not result.lvar.isArrayElem then return printErr("user function requires 1 argument")
 	// next should be the `=`
 	if varEndPos >= endIdx or tokens[varEndPos] != "=" then return printErr("incomplete DEF FN")
 	// and the rest of the line is the expression
-	exprToks = tokens[varEndPos+1:endIdx]
-	if not exprToks then return printErr("incomplete DEF FN")
-	
-	// Now, build a function and stuff it into the machine.
+	result.exprToks = tokens[varEndPos+1:endIdx]
+	if not result.exprToks then return printErr("incomplete DEF FN")
+	return result
+end function
+cmd.DEF.run = function
+	// Build a function and stuff it into the machine.
+	// (ToDo: be sure we clear these out with CLEAR.)
+	exprToks = self.exprToks
+	lvar = self.lvar
 	machine.fn[lvar.id] = function(arg)
 		return evalTokens(exprToks, {lvar.index:arg})
 	end function
@@ -1912,10 +1935,10 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 		i += 1
 	end while
 	
-	// Now, handle two cases: if all we have between THEN and ELSE
-	// is a number, treat it as a GOTO; otherwise, it's a statement
+	// Now, handle two cases: if what we have after THEN is a
+	// number, treat it as a GOTO; otherwise, it's a statement
 	// we should jump to.
-	if elsePos == endIdx + 2 and tokens[endIdx+1] isa number then
+	if tokens[endIdx+1] isa number then
 		result.thenJumpTo = Address.make(machine.lineNums.indexOf(tokens[endIdx+1]))
 		result.endTokenIdx = endIdx + 2
 	else
@@ -2828,14 +2851,19 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	if clearData then self.findData
 	self.halt = false
 	self.inThen = false
-	self.address = new Address
 	self.nextAddress = null
 	if not self.lineNums then return
 	self.compile
-	if self.halt then return
-	while self.address.lineIndex < self.lineNums.len and self.lineNums[self.address.lineIndex] < startLineNum
-		self.address.lineIndex += 1
+	self.timeAtRun = time
+//	machine.trace = true
+	if self.halt and startLineNum >= 0 then return
+	idx = 0
+	while idx < self.lineNums.len and self.lineNums[idx] < startLineNum
+		idx += 1
 	end while
+	if idx >= self.lineNums.len then return
+	self.address = Address.make(idx)
+	self.halt = false
 	while not self.halt
 		self.runOneLine
 	end while
@@ -2850,6 +2878,12 @@ Machine.runOneLine = function
 	if addr.lineIndex < 0 or addr.lineIndex >= self.lineNums.len then
 		self.halt = true
 		return
+	end if
+	if not addr isa Address or not addr.lineIndex isa number then
+		print "Bogus address:"
+		pprint addr
+		pprint stackTrace
+		exit
 	end if
 	lineNum = self.lineNums[addr.lineIndex]
 	code = self.code[lineNum]
@@ -2953,6 +2987,7 @@ Machine.jumpTo = function(address)
 end function
 
 machine = new Machine
+machine.timeAtStart = time
 
 //======================================================================
 // Unit Tests.
