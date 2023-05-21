@@ -252,6 +252,11 @@ end function
 Address.str = function
 	return self.lineIndex + "#" + self.statementIndex
 end function
+Address.displayStr = function
+	s = machine.lineNums[self.lineIndex]
+	if self.statementIndex > 0 then s += "#" + self.statementIndex
+	return s
+end function
 
 //======================================================================
 // Lexer (i.e. tokenizer)
@@ -1086,6 +1091,7 @@ setValue = function(lvar, value)
 			// dereference all but the LAST index 
 			// (which we'll use to assign the new value)
 			for idx in index[:-1]
+				idx = idx.eval
 				if idx < 0 or idx >= arr.len then
 					printErr "array index (" + idx + ") out of bounds (0-" + (arr.len-1) + ")"
 					return false
@@ -1093,7 +1099,8 @@ setValue = function(lvar, value)
 				arr = arr[idx]
 			end for
 			index = index[-1]
-		end if		
+		end if
+		index = index.eval
 		if not index isa number then
 			printErr "array index must be a number"
 			return false
@@ -1287,11 +1294,6 @@ ForLoopState.done = function
 	return curVal < self.limit
 end function
 
-// ReturnStackEntry: where a GOSUB came from (and returns to).
-ReturnStackEntry = {}
-ReturnStackEntry.lineIdx = 0
-ReturnStackEntry.tokenIdx = 0
-
 // Lvar class: represents a value on the left-hand side of an 
 // assignment, i.e., something that can be assigned a value.  This is
 // either a regular variable reference, or an array + index.
@@ -1329,8 +1331,7 @@ Lvar.make = function(tokens, startPos, endPos, dummyArg=false)
 				argEndPos = tokens.indexOfAnyParenSavvy([")",","], pos-1, endPos-1, endPos-1)
 				eval.nextTokIdx = pos
 				eval.endIdx = argEndPos
-				idx = eval.evaluate
-				if not idx isa number then return printErr("array index must be a number")
+				idx = eval.parse
 				lvar.index.push idx				
 				if argEndPos == tokens.len or tokens[argEndPos] == ")" then break
 				pos = argEndPos + 1
@@ -1531,7 +1532,7 @@ cmd = {}
 
 Machine.cmd = {}	// ToDo: delete this!
 
-cmd.BREAK = new Command
+cmd.BREAK = new Command; cmd.BREAK._name = "cmd.BREAK"
 cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	print
 	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len and
@@ -1544,7 +1545,7 @@ cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	while controlCPressed; yield; end while
 end function
 
-cmd.CD = new Command
+cmd.CD = new Command; cmd.CD._name = "cmd.CD"
 cmd.CD.parse = function(tokens, startIdx, endIdx, address)
 	args = tokens[startIdx+1:endIdx]
 	args.apply(@stripQuotes)
@@ -1557,13 +1558,13 @@ cmd.CD.run = function(tokens, startIdx, endIdx)
 	cd self.path
 end function
 
-cmd.CLEAR = new Command
+cmd.CLEAR = new Command; cmd.CLEAR._name = "cmd.CLEAR"
 cmd.CLEAR.run = function
 	machine.vars = {}
 	machine.arrs = {}
 end function
 
-cmd.COLOR = new Command
+cmd.COLOR = new Command; cmd.COLOR._name = "cmd.COLOR"
 cmd.COLOR.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.COLOR
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
@@ -1579,10 +1580,11 @@ cmd.COLOR.run = function
 	text.color = gfx.color
 end function
 
-cmd.DATA = new Command
+cmd.DATA = new Command; cmd.DATA._name = "cmd.DATA"
 cmd.DATA.parse = function(tokens, startIdx, endIdx, address)
-	// As a command, this is a no-op.
-	return self
+	// As a command, this is a no-op.  (Though it still needs to be
+	// a unique instance so we can store its endTokenIdx.)
+	return new cmd.DATA
 end function
 
 // ToDo:
@@ -1609,7 +1611,7 @@ Machine.cmd.DEF = function(tokens, startIdx, endIdx)
 	end function
 end function
 
-cmd.DIM = new Command
+cmd.DIM = new Command; cmd.DIM._name = "cmd.DIM"
 cmd.DIM.redim = false
 cmd.DIM.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -1658,7 +1660,7 @@ cmd.DIM.run = function
 	end for
 end function
 
-cmd.DIR = new Command
+cmd.DIR = new Command; cmd.DIR._name = "cmd.DIR"
 cmd.DIR.parse = function(tokens, startIdx, endIdx, redim=false)
 	result = new cmd.DIR
 	// NOTE: DIR is different from other commands; it cannot take
@@ -1675,7 +1677,7 @@ end function
 cmd.CAT = cmd.DIR		// CAT and CATALOG are aliases for DIR
 cmd.CATALOG = cmd.DIR
 
-cmd.CLOSE = new Command
+cmd.CLOSE = new Command; cmd.CLOSE._name = "cmd.CLOSE"
 cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
 	// ToDo: fix this after doing OPEN
 	return printErr("CLOSE not finished yet")
@@ -1691,7 +1693,7 @@ cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
 	end if
 end function
 
-cmd.EDIT = new Command
+cmd.EDIT = new Command; cmd.EDIT._name = "cmd.EDIT"
 cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.EDIT
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
@@ -1710,7 +1712,7 @@ cmd.EDIT.run = function
 	end if
 end function
 
-cmd.ELSE = new Command
+cmd.ELSE = new Command; cmd.ELSE._name = "cmd.ELSE"
 cmd.ELSE.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.ELSE
 	result.jumpToAddress = Address.make(address.lineIndex+1)
@@ -1720,7 +1722,7 @@ cmd.ELSE.run = function
 	machine.jumpTo self.jumpToAddress
 end function
 
-cmd.ELLIPSE = new Command
+cmd.ELLIPSE = new Command; cmd.ELLIPSE._name = "cmd.ELLIPSE"
 cmd.ELLIPSE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete ELLIPSE statement")
 	args = getDrawingArgs(tokens, startIdx+1)
@@ -1742,13 +1744,13 @@ cmd.ELLIPSE.run = function
 	machine.plotPos = [x[1], y[1]]
 end function
 
-cmd.END = new Command
+cmd.END = new Command; cmd.END._name = "cmd.END"
 cmd.END.run = function
 	machine.halt = true
 end function
 cmd.STOP = cmd.END
 
-cmd.FILL = new Command
+cmd.FILL = new Command; cmd.FILL._name = "cmd.FILL"
 cmd.FILL.parse = function(tokens, startIdx, endIdx, address)
 	if tokens.len < startIdx + 1 then
 		return printErr("incomplete FILL statement")
@@ -1761,7 +1763,7 @@ cmd.FILL.run = function
 	machine.fill = (self.mode.eval != 0)
 end function
 
-cmd.FOR = new Command
+cmd.FOR = new Command; cmd.FOR._name = "cmd.FOR"
 cmd.FOR.parse = function(tokens, startIdx, endIdx, address)
 	if tokens.len < startIdx + 6 or tokens[startIdx+2] != "=" then
 		return printErr("incomplete FOR statement")
@@ -1789,7 +1791,7 @@ cmd.FOR.run = function
 	  self.toExpr.eval, self.stepExpr.eval, self.address.next)
 end function
 
-cmd.GET = new Command
+cmd.GET = new Command; cmd.GET._name = "cmd.GET"
 cmd.GET.parse = function(tokens, startIdx, endIdx, address)
 	// ToDo: deal with file #
 	fileAndPos = getFile(tokens, startIdx)
@@ -1817,18 +1819,13 @@ cmd.GET.run = function
 end function
 cmd[new "GET#"] = cmd.GET
 
-cmd.GOSUB = new Command
+cmd.GOSUB = new Command; cmd.GOSUB._name = "cmd.GOSUB"
 cmd.GOSUB.parse = function(tokens, startIdx, endIdx, address)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOSUB")
 	end if
 	result = new cmd.GOSUB
-	returnTo = new ReturnStackEntry
-	if endIdx + 1 < tokens.len then
-		returnTo.lineIdx = machine.lineIdx; returnTo.tokenIdx = endIdx + 1
-	else
-		returnTo.lineIdx = machine.lineIdx + 1
-	end if
+	returnTo = address.next
 	result.jumpTo = tokens[startIdx+1]
 	result.returnTo = returnTo
 	return result
@@ -1839,7 +1836,7 @@ cmd.GOSUB.run = function
 	return 0
 end function
 
-cmd.GOTO = new Command
+cmd.GOTO = new Command; cmd.GOTO._name = "cmd.GOTO"
 cmd.GOTO.parse = function(tokens, startIdx, endIdx, address)
 	if endIdx != startIdx + 2 or not (tokens[startIdx+1] isa number) then
 		return printErr("line number required for GOTO")
@@ -1853,7 +1850,7 @@ cmd.GOTO.run = function
 	return 0
 end function
 
-cmd.HOME = new Command
+cmd.HOME = new Command; cmd.HOME._name = "cmd.HOME"
 cmd.HOME.run = function
 	clear
 	text.row = 26; text.column = 0
@@ -1865,7 +1862,7 @@ cmd.HOME.run = function
 end function
 cmd.CLS = cmd.HOME		// CLS is an alias for HOME
 
-cmd.HTAB = new Command
+cmd.HTAB = new Command; cmd.HTAB._name = "cmd.HTAB"
 cmd.HTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
@@ -1875,7 +1872,7 @@ cmd.HTAB.run = function
 	text.column = val(self.arg.eval) - 1
 end function
 
-cmd.IF = new Command
+cmd.IF = new Command; cmd.IF._name = "cmd.IF"
 cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	// This seems like a very tricky case, because of multiple statements
 	// per THEN and ELSE clause, and the possibility of nested IF-THEN-ELSE
@@ -1920,6 +1917,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	// we should jump to.
 	if elsePos == endIdx + 2 and tokens[endIdx+1] isa number then
 		result.thenJumpTo = Address.make(machine.lineNums.indexOf(tokens[endIdx+1]))
+		result.endTokenIdx = endIdx + 2
 	else
 		result.thenJumpTo = address.next
 	end if
@@ -1941,6 +1939,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 				// treat it as a GoTo; otherwise jump to that statement.
 				if tokens[i+1] isa number then
 					result.elseJumpTo = Address.make(machine.lineNums.indexOf(tokens[i+1]))
+					result.endTokenIdx = i + 2
 				else
 					result.elseJumpTo = Address.make(address.lineIndex, statementIdx+1)
 				end if
@@ -1966,7 +1965,7 @@ cmd.IF.run = function
 	end if
 end function
 
-cmd.IMAGE = new Command
+cmd.IMAGE = new Command; cmd.IMAGE._name = "cmd.IMAGE"
 cmd.IMAGE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+2 >= endIdx then return printErr("incomplete IMAGE statement")
 	commaPos = tokens.indexOfAnyParenSavvy([",", "TO"], startIdx+1, endIdx, endIdx)
@@ -2002,7 +2001,7 @@ cmd.IMAGE.run = function
 	end if
 end function
 
-cmd.INPUT = new Command
+cmd.INPUT = new Command; cmd.INPUT._name = "cmd.INPUT"
 cmd.INPUT.parse = function(tokens, startIdx, endIdx, address)
 	// Another quirky function (http://basic4all.epizy.com/index.php?topic=372).
 	// Our version:
@@ -2084,7 +2083,7 @@ cmd.INPUT.run = function
 end function
 cmd["INPUT#"] = @cmd.INPUT
 
-cmd.LET = new Command
+cmd.LET = new Command; cmd.LET._name = "cmd.LET"
 cmd.LET.parse = function(tokens, startIdx, endIdx, address)
 	if tokens[startIdx] == "LET" then startIdx += 1  // (skip LET, if present)
 	result = new cmd.LET
@@ -2104,7 +2103,7 @@ cmd.LET.run = function
 	setValue self.lvar, self.rhs.eval
 end function
 
-cmd.LINE = new Command
+cmd.LINE = new Command; cmd.LINE._name = "cmd.LINE"
 cmd.LINE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete LINE statement")
 	result = new self
@@ -2112,7 +2111,7 @@ cmd.LINE.parse = function(tokens, startIdx, endIdx, address)
 	return result
 end function
 cmd.LINE.run = function
-	args = self.args
+	args = self.args[:]
 	if args == null then return printErr("syntax error in LINE")
 	for i in args.indexes; args[i] = args[i].eval; end for
 	machine.plotPos = args[:2]
@@ -2123,7 +2122,7 @@ cmd.LINE.run = function
 	end if
 end function
 
-cmd.LIST = new Command
+cmd.LIST = new Command; cmd.LIST._name = "cmd.LIST"
 cmd.LIST.remOnly = false
 cmd.LIST.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -2137,7 +2136,7 @@ end function
 cmd.LISTREM = new cmd.LIST
 cmd.LISTREM.remOnly = true
 
-cmd.LOAD = new Command
+cmd.LOAD = new Command; cmd.LOAD._name = "cmd.LOAD"
 cmd.LOAD.parse = function(tokens, startIdx, endIdx, address)
 	// like DIR, this command is special; it can't take a variable
 	// as an argument, but you don't need to use quotation marks.
@@ -2151,7 +2150,7 @@ end function
 cmd.LOAD.run = function
 	lines = file.readLines(self.path)
 	if lines == null then
-		print "Unable to read program " + path
+		print "Unable to read program " + self.path
 	else
 		machine.reset
 		for line in lines
@@ -2162,7 +2161,7 @@ cmd.LOAD.run = function
 	end if
 end function
 
-cmd.NEXT = new Command
+cmd.NEXT = new Command; cmd.NEXT._name = "cmd.NEXT"
 cmd.NEXT.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.NEXT
 	result.args = tokens[startIdx+1:endIdx]
@@ -2198,12 +2197,12 @@ cmd.NEXT.run = function
 	end for
 end function
 
-cmd.NEW = new Command
+cmd.NEW = new Command; cmd.NEW._name = "cmd.NEW"
 cmd.NEW.run = function
 	machine.reset
 end function
 
-cmd.ON = new Command
+cmd.ON = new Command; cmd.ON._name = "cmd.ON"
 cmd.ON.parse = function(tokens, startIdx, endIdx, address)
 	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx, endIdx, endIdx)
 	if goPos == endIdx then return printErr("Incomplete ON statement")
@@ -2211,6 +2210,7 @@ cmd.ON.parse = function(tokens, startIdx, endIdx, address)
 	result.arg = Evaluator.make(tokens, startIdx+1, goPos).parse
 	result.targets = []		// line numbers we could jump to (0-based list)
 	result.gosub = (tokens[goPos] == "GOSUB")
+	if result.gosub then result.returnTo = address.next
 	pos = goPos + 1
 	while pos < endIdx
 		targetLineNum = tokens[pos]
@@ -2224,11 +2224,7 @@ end function
 cmd.ON.run = function
 	targetIndex = self.arg.eval - 1
 	if targetIndex < 0 or targetIndex >= self.targets.len then return
-	if self.gosub then
-		returnTo = new ReturnStackEntry
-		returnTo.lineIdx = machine.lineIdx + 1	
-		machine.returnStack.push returnTo
-	end if
+	if self.gosub then machine.returnStack.push self.returnTo
 	return machine.goTo(self.targets[targetIndex])
 end function
 
@@ -2255,7 +2251,7 @@ Machine.cmd.OPEN = function(tokens, startIdx, endIdx)
 	machine.files[fileId] = f
 end function
 
-cmd.PEN = new Command
+cmd.PEN = new Command; cmd.PEN._name = "cmd.PEN"
 cmd.PEN.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, endIdx)
@@ -2269,7 +2265,7 @@ cmd.PEN.run = function
 	machine.pen = arg
 end function
 
-cmd.PLOT = new Command
+cmd.PLOT = new Command; cmd.PLOT._name = "cmd.PLOT"
 cmd.PLOT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, true)
@@ -2306,7 +2302,7 @@ cmd.PLOT.run = function
 	end if
 end function
 
-cmd.POLY = new Command
+cmd.POLY = new Command; cmd.POLY._name = "cmd.POLY"
 cmd.POLY.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1, true)
@@ -2331,7 +2327,7 @@ cmd.POLY.run = function
 	machine.plotPos = [x[-1], y[-1]]
 end function
 
-cmd.PRINT = new Command
+cmd.PRINT = new Command; cmd.PRINT._name = "cmd.PRINT"
 cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 	// print a series of expressions, separated by , or ; or even just whitespace.
 	result = new cmd.PRINT
@@ -2386,12 +2382,12 @@ cmd.PRINT.run = function
 	if i+1 < self.delims.len then print self.delims[-1], ""
 end function
 
-cmd.PWD = new Command
+cmd.PWD = new Command; cmd.PWD._name = "cmd.PWD"
 cmd.PWD.run = function
 	print file.curdir
 end function
 
-cmd.READ = new Command
+cmd.READ = new Command; cmd.READ._name = "cmd.READ"
 cmd.READ.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.lvars = []
@@ -2421,7 +2417,7 @@ cmd.READ.run = function
 	end for
 end function
 
-cmd.RECT = new Command
+cmd.RECT = new Command; cmd.RECT._name = "cmd.RECT"
 cmd.RECT.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+1 >= endIdx then return printErr("incomplete RECT statement")
 	result = new self
@@ -2445,13 +2441,13 @@ end function
 cmd.REDIM = new cmd.DIM
 cmd.REDIM.redim = true
 
-cmd.REM = new Command
+cmd.REM = new Command; cmd.REM._name = "cmd.REM"
 cmd.REM.parse = function(tokens, startIdx, endIdx, address)
 	// no-op
-	return self
+	return new cmd.REM
 end function
 
-cmd.RENUMBER = new Command
+cmd.RENUMBER = new Command; cmd.RENUMBER._name = "cmd.RENUMBER"
 cmd.RENUMBER.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	toPos = tokens.indexOf("TO")
@@ -2536,7 +2532,7 @@ cmd.RENUMBER.run = function
 	machine.findComeFroms
 end function
 
-cmd.RESTORE = new Command
+cmd.RESTORE = new Command; cmd.RESTORE._name = "cmd.RESTORE"
 cmd.RESTORE.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx+1)
@@ -2567,20 +2563,20 @@ cmd.RESTORE.run = function
 	end if
 end function
 
-cmd.RETURN = new Command
+cmd.RETURN = new Command; cmd.RETURN._name = "cmd.RETURN"
 cmd.RETURN.run = function
 	if not machine.returnStack then return printErr("RETURN without GOSUB")
 	returnTo = machine.returnStack.pop
 	machine.jumpTo returnTo
 end function
 
-cmd.RUN = new Command
+cmd.RUN = new Command; cmd.RUN._name = "cmd.RUN"
 cmd.RUN.run = function
 	machine.halt = true
 	machine.doRunRunRun = true
 end function
 
-cmd.SAVE = new Command
+cmd.SAVE = new Command; cmd.SAVE._name = "cmd.SAVE"
 cmd.SAVE.parse = function(tokens, startIdx, endIdx, address)
 	// like DIR and LOAD, the SAVE command takes a path
 	// without quotation marks (and so cannot use an expression)
@@ -2612,7 +2608,7 @@ cmd.SAVE.run = function
 	end if
 end function
 
-cmd.SOUND = new Command
+cmd.SOUND = new Command; cmd.SOUND._name = "cmd.SOUND"
 cmd.SOUND.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.args = getArguments(tokens, startIdx + 1, true)
@@ -2670,7 +2666,7 @@ cmd.SOUND.run = function
 	snd.play
 end function
 
-cmd.VTAB = new Command
+cmd.VTAB = new Command; cmd.VTAB._name = "cmd.VTAB"
 cmd.VTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	result.arg = Evaluator.make(tokens,startIdx+1, endIdx).parse
@@ -2680,7 +2676,7 @@ cmd.VTAB.run = function
 	text.row = 26 - val(self.arg.eval)
 end function
 
-cmd.WAIT = new Command
+cmd.WAIT = new Command; cmd.WAIT._name = "cmd.WAIT"
 cmd.WAIT.duration = SNLiteral.one
 cmd.WAIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -2713,7 +2709,7 @@ Machine.runOneStatement = function(tokens, startTokenIndex)
 	if statementEnd == null then statementEnd = tokens.len
 	cmdObj = cmd.get(cmdName)
 	if cmdObj == null then
-		print "Command not found: " + cmdName
+		printErr "Command not found: " + cmdName
 		return null
 	end if
 //	print "found parse." + cmdName
@@ -2788,7 +2784,7 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	if statementEnd == null then statementEnd = tokens.len
 	cmdObj = cmd.get(cmdName)
 	if cmdObj == null then
-		print "Command not found: " + cmdName + " in line " + lineNum
+		printErr "Command not found: " + cmdName + " in " + address.displayStr
 		return null
 	end if
 	result = cmdObj.parse(tokens, startIdx, statementEnd, address)
@@ -2808,6 +2804,7 @@ Machine.compile = function
 		openIf = 0
 		while tokenIdx < tokens.len
 			ast = Machine.compileStatement(tokens, tokenIdx, Address.make(i, statementIdx))
+			if self.halt then return
 			self.code[lineNum].push ast
 			if ast isa cmd.IF then openIf += 1
 			if ast isa cmd.ELSE then
@@ -2858,7 +2855,7 @@ Machine.runOneLine = function
 	code = self.code[lineNum]
 
 	while addr.statementIndex < code.len	
-		if self.trace and lineNum >= 0 then print addr.str
+		if self.trace and lineNum >= 0 then print addr.displayStr
 		self.nextAddress = null
 		code[addr.statementIndex].run
 		if controlCPressed then
@@ -2876,6 +2873,7 @@ Machine.runOneLine = function
 	else
 		addr.lineIndex = self.nextAddress.lineIndex
 		addr.statementIndex = self.nextAddress.statementIndex
+		// ToDo: correctly handle IF that specifies a THEN target that does not exist!
 		if addr.lineIndex < self.lineNums.len and 
 		   addr.statementIndex >= self.code[self.lineNums[addr.lineIndex]].len then
 			addr.lineIndex += 1
