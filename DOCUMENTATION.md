@@ -58,6 +58,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | STR$(_n_) | converts number _n_ into a string using standard formatting |
 | TAB(_n_ \[, _m_\]) | given both _n_ and _m_, moves text cursor to row _m_, column _n_; given only _n_, advances the text cursor to column _n_ only if it is currently less than that; returns "" |
 | TAN(_n_) | tangent of _n_ radians |
+| TIME(_n_) | for _n_=0, time in seconds since system start; _n_=1, time since current run |
 | UPPER$(_a$_) | string _a$_ converted to uppercase; see also LOWER$ |
 | VAL(_a$_) | converts _a$_ to a number, if possible; else 0 |
 

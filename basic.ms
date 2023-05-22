@@ -1652,8 +1652,7 @@ cmd.DIM.parse = function(tokens, startIdx, endIdx, address)
 			while pos+1 < endIdx
 				nextPos = tokens.indexOfAnyParenSavvy([",", ")"], pos, endIdx)
 				if nextPos == null then return printErr("incomplete DIM statement")
-				maxIndex = Evaluator.make(tokens, pos, nextPos).evaluate
-				if not maxIndex isa number then return printErr("DIM size must be a number")
+				maxIndex = Evaluator.make(tokens, pos, nextPos).parse
 				dims.push maxIndex
 				pos = nextPos+1
 				if tokens[nextPos] == ")" then break
@@ -1678,7 +1677,12 @@ cmd.DIM.run = function
 			oldArr = machine.arrs[name]
 		end if
 		
-		machine.arrs[name] = makeMultiDimArray(dims, defaultVal)
+		dimVals = []
+		for d in dims
+			dimVals.push d.eval
+			if not dimVals[-1] isa number then return printErr("DIM size must be a number")
+		end for
+		machine.arrs[name] = makeMultiDimArray(dimVals, defaultVal)
 		// ToDo: maybe copy old data from oldArr, as much as possible?
 	end for
 end function
@@ -2816,33 +2820,30 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	return result
 end function
 
-Machine.compile = function
-	self.code = {}  // key: line number; value: list of parse trees (one per statement)
-	for i in self.lineNums.indexes
-		lineNum = self.lineNums[i]
-		self.code[lineNum] = []
-		tokens = self.program[lineNum]
-		tokenIdx = 0
-		statementIdx = 0
-		openIf = 0
-		while tokenIdx < tokens.len
-			ast = Machine.compileStatement(tokens, tokenIdx, Address.make(i, statementIdx))
-			if self.halt then return
-			self.code[lineNum].push ast
-			if ast isa cmd.IF then openIf += 1
-			if ast isa cmd.ELSE then
-				if not openIf then return printErr("Unexpected ELSE")
-			end if
-			if ast.endTokenIdx < tokens.len and tokens[ast.endTokenIdx] == "ELSE" then
-				// parse "ELSE" as a statement of its own, even if not preceded by ':'
-				if not openIf then return printErr("Unexpected ELSE")
-				self.code[lineNum].push cmd.ELSE.parse(tokens, ast.endTokenIdx, ast.endTokenIdx, Address.make(i))
-				statementIdx += 1
-			end if
-			tokenIdx = ast.endTokenIdx + 1
+Machine.compileLine = function(lineIndex)
+	lineNum = self.lineNums[lineIndex]
+	self.code[lineNum] = []
+	tokens = self.program[lineNum]
+	tokenIdx = 0
+	statementIdx = 0
+	openIf = 0
+	while tokenIdx < tokens.len
+		ast = Machine.compileStatement(tokens, tokenIdx, Address.make(lineIndex, statementIdx))
+		if self.halt then return
+		self.code[lineNum].push ast
+		if ast isa cmd.IF then openIf += 1
+		if ast isa cmd.ELSE then
+			if not openIf then return printErr("Unexpected ELSE")
+		end if
+		if ast.endTokenIdx < tokens.len and tokens[ast.endTokenIdx] == "ELSE" then
+			// parse "ELSE" as a statement of its own, even if not preceded by ':'
+			if not openIf then return printErr("Unexpected ELSE")
+			self.code[lineNum].push cmd.ELSE.parse(tokens, ast.endTokenIdx, ast.endTokenIdx, Address.make(lineIndex))
 			statementIdx += 1
-		end while
-	end for
+		end if
+		tokenIdx = ast.endTokenIdx + 1
+		statementIdx += 1
+	end while
 end function
 
 Machine.runProgram = function(startLineNum=0, clearData=true)
@@ -2853,7 +2854,7 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	self.inThen = false
 	self.nextAddress = null
 	if not self.lineNums then return
-	self.compile
+	self.code = {}
 	self.timeAtRun = time
 //	machine.trace = true
 	if self.halt and startLineNum >= 0 then return
@@ -2886,6 +2887,9 @@ Machine.runOneLine = function
 		exit
 	end if
 	lineNum = self.lineNums[addr.lineIndex]
+	if not self.code.hasIndex(lineNum) then
+		self.compileLine addr.lineIndex
+	end if
 	code = self.code[lineNum]
 
 	while addr.statementIndex < code.len	
@@ -2908,10 +2912,13 @@ Machine.runOneLine = function
 		addr.lineIndex = self.nextAddress.lineIndex
 		addr.statementIndex = self.nextAddress.statementIndex
 		// ToDo: correctly handle IF that specifies a THEN target that does not exist!
-		if addr.lineIndex < self.lineNums.len and 
-		   addr.statementIndex >= self.code[self.lineNums[addr.lineIndex]].len then
-			addr.lineIndex += 1
-			addr.statementIndex = 0
+		if addr.lineIndex < self.lineNums.len then
+			targetLineNum = self.lineNums[addr.lineIndex]
+			if not self.code.hasIndex(targetLineNum) then self.compileLine addr.lineIndex
+			if addr.statementIndex >= self.code[targetLineNum].len then
+				addr.lineIndex += 1
+				addr.statementIndex = 0
+			end if
 		end if
 	end if
 end function
