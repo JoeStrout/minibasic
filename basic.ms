@@ -254,7 +254,7 @@ Address.str = function
 end function
 Address.displayStr = function
 	s = machine.lineNums[self.lineIndex]
-	if self.statementIndex > 0 then s += "#" + self.statementIndex
+	if self.statementIndex > 0 then s += ":" + (self.statementIndex+1)
 	return s
 end function
 
@@ -837,7 +837,7 @@ Evaluator.parse = function()
 			canBail = false
 		else if tok isa string and tok.endsWith("(") then	// e.g. ABS(
 			if canBail then break
-			self.push tok, SE.identifier		// ToDo: reconsider
+			self.push tok, SE.identifier
 			canBail = false
 		else if tok == "," then
 			// we've gotten a comma, which is a top-level grouper;
@@ -1016,29 +1016,33 @@ end function
 // Helper function to find the file handle for a PRINT#, INPUT#, or GET# command.
 // Look for a "#" at the end of the token at startIdx.  If not found, return [null,startIdx+1].
 // If found, return the file ID and the new startIdx after the ID token(s) as
-// [file, newStart].  In case of error, print error and return null.
+// [fileId, newStart].  In case of error, print error and return null.
 getFile = function(tokens, startIdx)
 	if startIdx >= tokens.len or tokens[startIdx][-1] != "#" then return [null, startIdx+1]
 	if startIdx+1 == tokens.len then return printErr("syntax error")
-	tok = tokens[startIdx+1]
-	result = null
-	if tok isa number then
-		result = [tok, startIdx+2]
-	else if isOpenParen(tok) then
-		closePos = tokens.findCloseParen(startIdx+2)
-		if closePos == null then return printErr("unbalanced parentheses")
-		fileId = evalTokens(tokens[startIdx+2:closePos])
-		if not fileId isa number then return printErr("file ID must be numeric")
-		result = [fileId, closePos+1]
-	else if isIdentifier(tok) then
-		fileId = getValue(tok)
-		if not fileId isa number then return printErr("file ID must be numeric")
-		result = [fileId, startIdx+2]		
-	end if
-	if result == null or not machine.files.hasIndex(result[0]) then return printErr("invalid file ID")
-	result[0] = machine.files[result[0]]
-	if result[1] < tokens.len and tokens[result[1]] == "," then result[1] += 1
-	return result
+	endIdx = tokens.indexOfAnyParenSavvy([":",","], startIdx+1, tokens.len, tokens.len)
+	e = Evaluator.make(tokens, startIdx+1, endIdx)
+	fileIdExpr = e.parse
+	return [fileIdExpr, e.nextTokIdx + 1]
+// ToDo: clean-up on aisle 5!
+//	result = null
+//	if tok isa number then
+//		result = [tok, startIdx+2]
+//	else if isOpenParen(tok) then
+//		closePos = tokens.findCloseParen(startIdx+2)
+//		if closePos == null then return printErr("unbalanced parentheses")
+//		fileId = evalTokens(tokens[startIdx+2:closePos])
+//		if not fileId isa number then return printErr("file ID must be numeric")
+//		result = [fileId, closePos+1]
+//	else if isIdentifier(tok) then
+//		fileId = getValue(tok)
+//		if not fileId isa number then return printErr("file ID must be numeric")
+//		result = [fileId, startIdx+2]		
+//	end if
+//	if result == null or not machine.files.hasIndex(result[0]) then return printErr("invalid file ID")
+//	result[0] = machine.files[result[0]]
+//	if result[1] < tokens.len and tokens[result[1]] == "," then result[1] += 1
+//	return result
 end function
 
 //======================================================================
@@ -1046,13 +1050,12 @@ end function
 // (Includes the Machine class, but also some global helper methods.)
 //======================================================================
 
-printErr = function(err)
-	addr = machine.address
+printErr = function(err, addr)
+	if addr == null then addr = machine.address
 	loc = ""
 	if addr.lineIndex >= 0 and machine.lineNums.hasIndex(addr.lineIndex) and
 			machine.lineNums[addr.lineIndex] >= 0 then
-		loc = " in line " + machine.lineNums[addr.lineIndex]
-		if addr.statementIndex > 0 then loc += "(" + addr.statementIndex + ")"
+		loc = " in line " + addr.displayStr
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
@@ -1424,6 +1427,11 @@ Machine.fn.ASC = function(s); if requireStr(s) then return code(s); end function
 Machine.fn.ATN = function(n); if requireNum(n) then return atan(n); end function
 Machine.fn["CHR$"] = function(n); if requireNum(n) then return char(n); end function
 Machine.fn.COS = function(n); if requireNum(n) then return cos(n); end function
+Machine.fn.EOF = function(n)
+	if not requireNum(n) then return
+	if not machine.files.hasIndex(n) then return printErr("invalid file ID in EOF")
+	return machine.files[n].atEnd
+end function
 Machine.fn.EXP = function(n); if requireNum(n) then return mathUtil.e ^ n; end function
 Machine.fn.FIX = function(n); if requireNum(n) then return int(n); end function
 Machine.fn["INKEY$"] = function(z);	if key.available then return key.get; return ""; end function
@@ -1545,9 +1553,8 @@ Command.parse = function(tokens, startIdx, endIdx, address)
 	return new self
 end function
 Command.run = null
-cmd = {}
 
-Machine.cmd = {}	// ToDo: delete this!
+cmd = {}	// global map of commands
 
 cmd.BREAK = new Command; cmd.BREAK._name = "cmd.BREAK"
 cmd.BREAK.run = function(tokens, startIdx, endIdx)
@@ -1706,13 +1713,15 @@ cmd.CATALOG = cmd.DIR
 
 cmd.CLOSE = new Command; cmd.CLOSE._name = "cmd.CLOSE"
 cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
-	// ToDo: fix this after doing OPEN
-	return printErr("CLOSE not finished yet")
-	
 	if startIdx+1 >= endIdx then return printErr("incomplete CLOSE statement")
 	args = getArguments(tokens, startIdx+1, endIdx)
 	if args == null or args.len != 1 then return printErr("invalid arguments to CLOSE")
-	fileId = args[0]
+	result = new cmd.CLOSE
+	result.fileId = args[0]
+	return result
+end function
+cmd.CLOSE.run = function
+	fileId = self.fileId.eval
 	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in CLOSE")
 	if machine.files.hasIndex(fileId) then
 		machine.files[fileId].close
@@ -1820,23 +1829,29 @@ end function
 
 cmd.GET = new Command; cmd.GET._name = "cmd.GET"
 cmd.GET.parse = function(tokens, startIdx, endIdx, address)
-	// ToDo: deal with file #
+	result = new cmd.GET
 	fileAndPos = getFile(tokens, startIdx)
 	if fileAndPos == null then return
-	f = fileAndPos[0]; pos = fileAndPos[1]
-	
-	result = new cmd.GET
+	result.fileId = fileAndPos[0]
+	pos = fileAndPos[1]
+
 	result.lvar = Lvar.make(tokens, pos, endIdx)
 	if result.lvar == null then return printErr("incomplete GET statement")
 	return result
 end function
 cmd.GET.run = function	
-	if false then
+	f = null
+	if self.fileId then
+		fileId = self.fileId.eval
+		if not machine.files.hasIndex(fileId) then return printErr("invalid file ID in PRINT")
+		f = machine.files[fileId]
+	end if
+	if f then
 		k = f.read(1)
 		if k == null then
-			if isNumericId(lvar.id) then k = -1 else k = ""
+			if isNumericId(self.lvar.id) then k = -1 else k = ""
 		else
-			if isNumericId(lvar.id) then k = k.code
+			if isNumericId(self.lvar.id) then k = k.code
 		end if
 	else
 		k = key.get
@@ -1844,7 +1859,7 @@ cmd.GET.run = function
 	end if
 	setValue self.lvar, k
 end function
-cmd[new "GET#"] = cmd.GET
+cmd["GET#"] = cmd.GET
 
 cmd.GOSUB = new Command; cmd.GOSUB._name = "cmd.GOSUB"
 cmd.GOSUB.parse = function(tokens, startIdx, endIdx, address)
@@ -1943,7 +1958,9 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	// number, treat it as a GOTO; otherwise, it's a statement
 	// we should jump to.
 	if tokens[endIdx+1] isa number then
-		result.thenJumpTo = Address.make(machine.lineNums.indexOf(tokens[endIdx+1]))
+		lineNum = tokens[endIdx+1]
+		result.thenJumpTo = Address.make(machine.lineNums.indexOf(lineNum))
+		if result.thenJumpTo.lineIndex == null then return printErr("Invalid line number " + lineNum)
 		result.endTokenIdx = endIdx + 2
 	else
 		result.thenJumpTo = address.next
@@ -1965,7 +1982,9 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 				// Found it!  If followed by a number,
 				// treat it as a GoTo; otherwise jump to that statement.
 				if tokens[i+1] isa number then
-					result.elseJumpTo = Address.make(machine.lineNums.indexOf(tokens[i+1]))
+					lineNum = tokens[i+1]
+					result.elseJumpTo = Address.make(machine.lineNums.indexOf(lineNum))
+					if result.elseJumpTo.lineIndex == null then return printErr("Invalid line number " + lineNum)
 					result.endTokenIdx = i + 2
 				else
 					result.elseJumpTo = Address.make(address.lineIndex, statementIdx+1)
@@ -2037,13 +2056,13 @@ cmd.INPUT.parse = function(tokens, startIdx, endIdx, address)
 	//		- when inputting a number, trims and stops at whitespace or comma
 	//		- when inputting a string, stops at comma UNLESS it is the last
 	//		  variable in the input list, in which case it continues to EOL.
+
+	result = new self
 	
-	// ToDo: file support
 	fileAndPos = getFile(tokens, startIdx)
 	if fileAndPos == null then return
-	f = fileAndPos[0]; pos = fileAndPos[1]
-	
-	result = new self
+	result.fileId = fileAndPos[0]
+	pos = fileAndPos[1]
 	
 	// Start by finding the prompt (which must be a string literal)
 	if pos < endIdx and isStringLiteral(tokens[pos]) then
@@ -2076,7 +2095,12 @@ cmd.INPUT.parse = function(tokens, startIdx, endIdx, address)
 end function	
 cmd.INPUT.run = function
 	// Loop over variables, gathering input for each one, asking for more as needed
-	f = null // ToDo: file support!
+	f = null
+	if self.fileId then
+		fileId = self.fileId.eval
+		if not machine.files.hasIndex(fileId) then return printErr("invalid file ID in PRINT")
+		f = machine.files[fileId]
+	end if
 	remainingInput = ""
 	prompt = self.prompt
 	for lvarIdx in self.lvars.indexes
@@ -2084,7 +2108,7 @@ cmd.INPUT.run = function
 		varIsNumeric = isNumericId(lvar.id)
 		while not remainingInput
 			if f then remainingInput = f.readLine else remainingInput = inputOrControlC(prompt)
-			if remainingInput == char(3) then return machine.cmd.BREAK
+			if remainingInput == char(3) then return cmd.BREAK
 			if varIsNumeric then remainingInput = remainingInput.trimLeft
 			prompt = "??"
 			if not varIsNumeric then break  // empty string is OK input for a string
@@ -2256,24 +2280,31 @@ cmd.ON.run = function
 end function
 
 // ToDo: file support!
-Machine.cmd.OPEN = function(tokens, startIdx, endIdx)
+cmd.OPEN = new Command; cmd.OPEN._name = "cmd.OPEN"
+cmd.OPEN.parse = function(tokens, startIdx, endIdx, address)
 	// syntax: OPEN fileId, [mode,] path
 	//	fileId: a unique nonzero number to identify the open file
 	//	mode: a file mode string like "r" or "a+", or a number: 0="r", 1="w"
 	// Note that we do NOT have or support the "device number" second
 	// parameter which you may see in C64 BASIC2 programs.  Just leave it out.
+	result = new cmd.OPEN
 	args = getArguments(tokens, startIdx+1, endIdx)
 	if args.len < 2 then return printErr("incomplete OPEN command")
 	if args.len > 3 then return printErr("too many arguments to OPEN")
-	fileId = args[0]
+	result.fileId = args[0]
+	if args.len == 3 then result.mode = args[1] else result.mode = "r"
+	result.path = args[-1]
+	return result
+end function
+cmd.OPEN.run = function	
+	fileId = self.fileId.eval
 	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in OPEN")
-	if args.len == 3 then mode = args[1] else mode = "r"
+	if machine.files.hasIndex(fileId) then return printErr("file " + fileId + " already open")
+	mode = self.mode.eval
 	if mode isa number then
 		if mode == 0 then mode = "r" else mode = "w"
 	end if
-	path = args[-1]
-	if machine.files.hasIndex(fileId) then return printErr("file " + fileId + " already open")
-	f = file.open(path, mode)
+	f = file.open(self.path.eval, mode)
 	if f isa string then return printErr(f)
 	machine.files[fileId] = f
 end function
@@ -2362,10 +2393,11 @@ cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 	result.delims = []
 	fileAndPos = getFile(tokens, startIdx)
 	if fileAndPos == null then return
-	f = fileAndPos[0]; pos = fileAndPos[1]
+	result.fileId = fileAndPos[0]
+	pos = fileAndPos[1]
 	
 	needEOL = true
-	eval = Evaluator.make(tokens, startIdx, endIdx)
+	eval = Evaluator.make(tokens, pos, endIdx)
 	
 	while eval.nextTokIdx < endIdx
 		// Grab complete expressions even if they aren't separated
@@ -2402,12 +2434,25 @@ cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 	return result
 end function
 cmd.PRINT.run = function
+	f = null
+	if self.fileId then
+		fileId = self.fileId.eval
+		if not machine.files.hasIndex(fileId) then return printErr("invalid file ID in PRINT")
+		f = machine.files[fileId]
+	end if
 	i = -1
 	for i in self.args.indexes
-		print self.args[i].eval, self.delims[i]
+		if f then
+			f.write self.args[i].eval; f.write self.delims[i]
+		else
+			print self.args[i].eval, self.delims[i]
+		end if
 	end for
-	if i+1 < self.delims.len then print self.delims[-1], ""
+	if i+1 < self.delims.len then 
+		if f then f.write self.delims[-1] else print self.delims[-1], ""
+	end if
 end function
+cmd["PRINT#"] = cmd.PRINT
 
 cmd.PWD = new Command; cmd.PWD._name = "cmd.PWD"
 cmd.PWD.run = function
@@ -2811,10 +2856,11 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	if statementEnd == null then statementEnd = tokens.len
 	cmdObj = cmd.get(cmdName)
 	if cmdObj == null then
-		printErr "Command not found: " + cmdName + " in " + address.displayStr
+		printErr "Command not found: " + cmdName, address
 		return null
 	end if
 	result = cmdObj.parse(tokens, startIdx, statementEnd, address)
+	if not result then return
 	result.startTokenIdx = startIdx
 	if not result.hasIndex("endTokenIdx") then result.endTokenIdx = statementEnd
 	return result
@@ -2910,8 +2956,8 @@ Machine.runOneLine = function
 		addr.statementIndex = 0
 	else
 		addr.lineIndex = self.nextAddress.lineIndex
+		if addr.lineIndex == null then return printErr("Invalid jump target")		
 		addr.statementIndex = self.nextAddress.statementIndex
-		// ToDo: correctly handle IF that specifies a THEN target that does not exist!
 		if addr.lineIndex < self.lineNums.len then
 			targetLineNum = self.lineNums[addr.lineIndex]
 			if not self.code.hasIndex(targetLineNum) then self.compileLine addr.lineIndex
