@@ -1586,6 +1586,27 @@ cmd.CLEAR = new Command; cmd.CLEAR._name = "cmd.CLEAR"
 cmd.CLEAR.run = function
 	machine.vars = {}
 	machine.arrs = {}
+	for fnName in machine.fn.indexes
+		if fnName.startsWith("FN ") then machine.fn.remove fnName
+	end for
+end function
+
+cmd.CLOSE = new Command; cmd.CLOSE._name = "cmd.CLOSE"
+cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
+	if startIdx+1 >= endIdx then return printErr("incomplete CLOSE statement")
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if args == null or args.len != 1 then return printErr("invalid arguments to CLOSE")
+	result = new cmd.CLOSE
+	result.fileId = args[0]
+	return result
+end function
+cmd.CLOSE.run = function
+	fileId = self.fileId.eval
+	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in CLOSE")
+	if machine.files.hasIndex(fileId) then
+		machine.files[fileId].close
+		machine.files.remove fileId
+	end if
 end function
 
 cmd.COLOR = new Command; cmd.COLOR._name = "cmd.COLOR"
@@ -1622,6 +1643,11 @@ cmd.DEF.parse = function(tokens, startIdx, endIdx, address)
 		if varEndPos == null then return printErr("unmatched parentheses")
 	end if
 	result.lvar = Lvar.make(tokens, startIdx, varEndPos, true)
+	if result.lvar.id.len > 2 and result.lvar.id[:2].upper == "FN" and result.lvar.id[2] != " " then
+		// normalize, e.g., FNSQ --> FN SQ
+		result.lvar.id = "FN " + result.lvar.id[2:].upper
+	end if
+
 	if result.lvar == null then return
 	if not result.lvar.isArrayElem then return printErr("user function requires 1 argument")
 	// next should be the `=`
@@ -1634,10 +1660,11 @@ end function
 cmd.DEF.run = function
 	// Build a function and stuff it into the machine.
 	// (ToDo: be sure we clear these out with CLEAR.)
+	globals.wtf = self
 	exprToks = self.exprToks
 	lvar = self.lvar
 	machine.fn[lvar.id] = function(arg)
-		return evalTokens(exprToks, {lvar.index:arg})
+		return evalTokens(exprToks, {lvar.index.upper:arg})
 	end function
 end function
 
@@ -1710,24 +1737,6 @@ cmd.DIR.run = function
 end function
 cmd.CAT = cmd.DIR		// CAT and CATALOG are aliases for DIR
 cmd.CATALOG = cmd.DIR
-
-cmd.CLOSE = new Command; cmd.CLOSE._name = "cmd.CLOSE"
-cmd.CLOSE.parse = function(tokens, startIdx, endIdx, address)
-	if startIdx+1 >= endIdx then return printErr("incomplete CLOSE statement")
-	args = getArguments(tokens, startIdx+1, endIdx)
-	if args == null or args.len != 1 then return printErr("invalid arguments to CLOSE")
-	result = new cmd.CLOSE
-	result.fileId = args[0]
-	return result
-end function
-cmd.CLOSE.run = function
-	fileId = self.fileId.eval
-	if not fileId isa number or fileId == 0 then return printErr("invalid file ID in CLOSE")
-	if machine.files.hasIndex(fileId) then
-		machine.files[fileId].close
-		machine.files.remove fileId
-	end if
-end function
 
 cmd.EDIT = new Command; cmd.EDIT._name = "cmd.EDIT"
 cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
