@@ -11,7 +11,7 @@
 140  IF NP = 2 THEN 1300
 150  IF  NOT NP THEN 1500
 160  PRINT : PRINT "Select which to play, X or O : ";
-170  GET A$: IF A$ <  > "X" AND A$ <  > "O" THEN 170
+170  GET A$: A$ = UPPER$(A$): IF A$ <  > "X" AND A$ <  > "O" THEN 170
 180 PC = 1 + (A$ = "O"):CC = 1 + (A$ = "X")
 190  GOTO 1000
 700  REM  FLIP ALL TILES RESULTING FROM X,Y
@@ -25,7 +25,7 @@
 820 A = B(X + DX * I,Y + DY * I): IF A = 0 OR (A = C AND F = 0) THEN  RETURN 
 830  IF A <  > C THEN F = 1:I = I + 1: GOTO 820
 840  IF A = C THEN  FOR J = 1 TO I - 1:B(X + DX * J,Y + DY * J) = C:ST = ST + 1:SX(ST) = X + DX * J:SY(ST) = Y + DY * J
-850  IF DS THEN  VTAB 3 + Y + DY * J: HTAB 15 + X + DX * J: PRINT  MID$ (DS$,C + 1,1):SOUND 1, 0.02, 1, 4
+850  IF DS THEN  VTAB 3 + Y + DY * J: HTAB 15 + X + DX * J: PRINT  MID$ (DS$,C + 1,1):SOUND 1, 0.02, 1, 4: WAIT 0.2
 860  NEXT : RETURN 
 900  REM  PRINT BOARD
 910 H = 15 + 1 : VTAB 3 : HTAB H : COLOR 12: PRINT "ABCDEFGH"
@@ -77,8 +77,8 @@
 2060  IF PS > CS THEN  PRINT "   You win!!!": GOTO 2100
 2070  PRINT "   A tie!"
 2100  PRINT : PRINT "Would you like to play again? ";
-2110  GET A$: IF A$ <  > "Y" AND A$ <  > "N" THEN 2110
-2120  IF A$ = "Y" THEN  PRINT "Yes": FOR J = 1 TO 1000: NEXT : RUN 
+2110  GET A$: A$ = UPPER$(A$): IF A$ <  > "Y" AND A$ <  > "N" THEN 2110
+2120  IF A$ = "Y" THEN  PRINT "Yes": WAIT : RUN 
 2130  PRINT "No": PRINT : PRINT "Thanks for playing!": END 
 3000  REM  PLAYER'S TURN
 3010  GET A$: IF A$ =  CHR$ (10) THEN PA = PA + 1: RETURN
@@ -87,8 +87,8 @@
 3040  A$ = UPPER$(A$): IF A$ < "A" OR A$ > "H" THEN 3010
 3045  PRINT A$;:X =  ASC (A$) - 64: IF  NOT Y THEN  PRINT "-";: GOTO 3010
 3050  PRINT : PRINT 
-3060  IF B(X,Y) THEN  PRINT "Illegal move (there's already a piece": PRINT "in that spot!)": FOR J = 1 TO 2000: NEXT : VTAB  POS(1) - 3:X =  - 1: RETURN 
-3070  VTAB 3 + Y: HTAB 15 + X: PRINT  MID$ (DS$,PC + 1,1);:SOUND 1, 0.02, 1, 4
+3060  IF B(X,Y) THEN  PRINT "Illegal move (there's already a piece": PRINT "in that spot!)": WAIT 2 : VTAB  POS(1) - 3:X =  - 1: RETURN 
+3070  VTAB 3 + Y: HTAB 15 + X: PRINT  MID$ (DS$,PC + 1,1);:SOUND 1, 0.02, 1, 4: WAIT 0.3
 3080 B(X,Y) = PC: GOSUB 700: IF ST = 1 THEN  VTAB 20: PRINT : PRINT "Illegal move (you must flip some tiles.":B(X,Y) = 0:X =  - 1: RETURN 
 3090 PA = 0: RETURN 
 5000  REM   COMPUTER'S TURN
@@ -99,8 +99,8 @@
 5050  FOR I = 1 TO 8: FOR J = 1 TO 8:B(I,J) = C(I,J): NEXT J,I
 5190  NEXT Y: PRINT ".";: NEXT X: PRINT 
 5200  REM  DECIDED
-5205  IF  NOT BS THEN  PRINT : PRINT "CAN'T MOVE.": FOR J = 1 TO 1000: NEXT :PA = PA + 1:DS = 1: RETURN 
-5210  VTAB 3 + BY: HTAB 15 + BX: PRINT  MID$ ("XO",CC + 1,1);:SOUND 1, 0.02, 1, 4
+5205  IF  NOT BS THEN  PRINT : PRINT "CAN'T MOVE.": WAIT :PA = PA + 1:DS = 1: RETURN 
+5210  VTAB 3 + BY: HTAB 15 + BX: PRINT  MID$ ("XO",CC + 1,1);:SOUND 1, 0.02, 1, 4: WAIT 0.3
 5215 PA = 0:DS = 1
 5220  FOR X = 1 TO 8: FOR Y = 1 TO 8:B(X,Y) = C(X,Y): NEXT Y,X:B(BX,BY) = CC:X = BX:Y = BY: GOTO 700
 6000 REM  Clear to the bottom of the text screen

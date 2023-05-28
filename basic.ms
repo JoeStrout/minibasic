@@ -535,7 +535,7 @@ end function
 SNArrayOrCall = new SyntaxNode
 SNArrayOrCall.allowArrayRefs = false
 SNArrayOrCall.eval = function(c)
-	Evaluator.debugPrint "Evaluating a call: " + self.name
+	Parser.debugPrint "Evaluating a call: " + self.name
 	funcOrArrayName = self.name
 	args = []
 	for n in self.args; args.push n.eval(c); end for
@@ -635,16 +635,16 @@ SE.toString = function
 	return self.type + "(" + self.content + ")"
 end function
 
-Evaluator = {}
-Evaluator.tokens = []
-Evaluator.nextTokIdx = 0
-Evaluator.endIdx = 0
-Evaluator.done = function; return self.nextTokIdx >= self.endIdx; end function
-Evaluator.stack = null	// list of SE
-Evaluator.allowArrayRefs = false	// if true, let user pass entire array, e.g. A()
+Parser = {}
+Parser.tokens = []
+Parser.nextTokIdx = 0
+Parser.endIdx = 0
+Parser.done = function; return self.nextTokIdx >= self.endIdx; end function
+Parser.stack = null	// list of SE
+Parser.allowArrayRefs = false	// if true, let user pass entire array, e.g. A()
 
-Evaluator.make = function(tokens, startIdx=0, endIdx=null)
-	eval = new Evaluator
+Parser.make = function(tokens, startIdx=0, endIdx=null)
+	eval = new Parser
 	eval.tokens = tokens
 	eval.nextTokIdx = startIdx
 	if endIdx == null then eval.endIdx = tokens.len else eval.endIdx = endIdx
@@ -652,20 +652,20 @@ Evaluator.make = function(tokens, startIdx=0, endIdx=null)
 	return eval
 end function
 
-Evaluator.debugPrint = function(s)
+Parser.debugPrint = function(s)
 	// Uncomment this line to see lots of helpful debugging output:
 //	text.color = "#008800"; print s; text.color = gfx.color
 end function
 
-Evaluator.stackStr = function
+Parser.stackStr = function
 	result = []
 	for item in self.stack; result.push item.toString; end for
 	return "[" + result.join(", ") + "]"
 end function
 
-Evaluator.push = function(content, type)
+Parser.push = function(content, type)
 	if type == null then
-		print "Invalid call to Evaluator.push"
+		print "Invalid call to Parser.push"
 		pprint stackTrace
 		exit
 	end if
@@ -675,18 +675,18 @@ Evaluator.push = function(content, type)
 	self.stack.push se
 end function
 
-Evaluator.pushValue = function(value)
+Parser.pushValue = function(value)
 	if value isa number or value isa string then
 		return self.push(SNLiteral.make(value), SE.node)
 	else if value isa SyntaxNode then
 		return self.push(value, SE.node)
 	end if
-	print "Invalid call to Evaluator.pushValue; got " + value
+	print "Invalid call to Parser.pushValue; got " + value
 	pprint stackTrace
 	exit
 end function
 
-Evaluator.popValue = function
+Parser.popValue = function
 	if not self.stack then return printErr("stack underflow")
 	se = self.stack.pop
 	if se.type == SE.node or se.type == SE.identifier then return se.content
@@ -696,7 +696,7 @@ Evaluator.popValue = function
 	exit
 end function
 
-Evaluator.popOperator = function
+Parser.popOperator = function
 	if not self.stack then return printErr("stack underflow")
 	se = self.stack.pop
 	if se.type == SE.operator then return se.content
@@ -705,7 +705,7 @@ Evaluator.popOperator = function
 	exit
 end function
 
-Evaluator.doBinop = function
+Parser.doBinop = function
 	opB = self.popValue
 	if machine.halt then return
 	op = self.popOperator
@@ -753,7 +753,7 @@ Evaluator.doBinop = function
 	self.debugPrint "Applied " + op + " to " + opA + " and " + opB + " to get " + self.stack[-1]
 end function
 
-Evaluator.doUnaryOp = function
+Parser.doUnaryOp = function
 	opA = self.popValue
 	if machine.halt then return
 	op = self.popOperator
@@ -771,7 +771,7 @@ end function
 // that, along with its arguments (stuff on stack above that),
 // pulling all of these off the stack.  If no such thing is found
 // (before we get to an operator or start of stack), return null.
-Evaluator.pullCall = function
+Parser.pullCall = function
 	pos = self.stack.len - 1
 	while pos >= 0
 		if self.stack[pos].isOpenParen then
@@ -802,7 +802,7 @@ end function
 // Collapse any binary and unary operators on the top of 
 // the stack.  This should proceed until we hit either the
 // bottom of the stack, or an open paren, or a comma.
-Evaluator.collapseStack = function
+Parser.collapseStack = function
 	self.debugPrint "Collapsing self.stack: " + self.stackStr
 	while self.stack.len > 1 and not machine.halt
 		if self.stack[-2].type == SE.comma then return
@@ -822,8 +822,8 @@ end function
 
 // parse: evaluate a tokenized expression, returning a SyntaxNode that
 // represents its whole parse tree.
-Evaluator.parse = function()
-	self.debugPrint "Evaluator.parse(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
+Parser.parse = function()
+	self.debugPrint "Parser.parse(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
 	self.stack = []
 	canBail = false	// marks points where we can bail out if we start a new value
 
@@ -937,14 +937,14 @@ end function
 
 // evaluate: evaluate a tokenized expression, all the way to a value.
 //  For example, given [6, "*", 7], return 42.
-Evaluator.evaluate = function(customLocals=null)
+Parser.evaluate = function(customLocals=null)
 	machine.halt = false
 	parseTree = self.parse
 	if parseTree then return parseTree.eval(customLocals)
 end function
 // Evaluate the given string of tokens, which should comprise a single expression.
 evalTokens = function(tokens, customLocals=null)
-	eval = Evaluator.make(tokens)
+	eval = Parser.make(tokens)
 	return eval.evaluate(customLocals)
 end function
 
@@ -955,7 +955,7 @@ end function
 getArguments = function(tokens, startIdx, allowArrayRefs = false)
 	result = []
 	pos = startIdx
-	eval = Evaluator.make(tokens)
+	eval = Parser.make(tokens)
 	eval.allowArrayRefs = allowArrayRefs
 	while pos < tokens.len
 		if tokens[pos] == ":" then break
@@ -977,7 +977,7 @@ end function
 getDrawingArgs = function(tokens, startIdx, allowArrayRefs = false, assumeFrom = true)
 	result = []
 	pos = startIdx
-	eval = Evaluator.make(tokens)
+	eval = Parser.make(tokens)
 	eval.allowArrayRefs = allowArrayRefs
 	toPos = null
 	if tokens[startIdx] == "TO" then
@@ -1021,28 +1021,9 @@ getFile = function(tokens, startIdx)
 	if startIdx >= tokens.len or tokens[startIdx][-1] != "#" then return [null, startIdx+1]
 	if startIdx+1 == tokens.len then return printErr("syntax error")
 	endIdx = tokens.indexOfAnyParenSavvy([":",","], startIdx+1, tokens.len, tokens.len)
-	e = Evaluator.make(tokens, startIdx+1, endIdx)
+	e = Parser.make(tokens, startIdx+1, endIdx)
 	fileIdExpr = e.parse
 	return [fileIdExpr, e.nextTokIdx + 1]
-// ToDo: clean-up on aisle 5!
-//	result = null
-//	if tok isa number then
-//		result = [tok, startIdx+2]
-//	else if isOpenParen(tok) then
-//		closePos = tokens.findCloseParen(startIdx+2)
-//		if closePos == null then return printErr("unbalanced parentheses")
-//		fileId = evalTokens(tokens[startIdx+2:closePos])
-//		if not fileId isa number then return printErr("file ID must be numeric")
-//		result = [fileId, closePos+1]
-//	else if isIdentifier(tok) then
-//		fileId = getValue(tok)
-//		if not fileId isa number then return printErr("file ID must be numeric")
-//		result = [fileId, startIdx+2]		
-//	end if
-//	if result == null or not machine.files.hasIndex(result[0]) then return printErr("invalid file ID")
-//	result[0] = machine.files[result[0]]
-//	if result[1] < tokens.len and tokens[result[1]] == "," then result[1] += 1
-//	return result
 end function
 
 //======================================================================
@@ -1340,7 +1321,7 @@ Lvar.make = function(tokens, startPos, endPos, dummyArg=false)
 			lvar.index = tokens[startPos+1]
 		else
 			lvar.index = []
-			eval = Evaluator.make(tokens, startPos+1, endPos-1)
+			eval = Parser.make(tokens, startPos+1, endPos-1)
 			pos = startPos+1
 			while pos < endPos-1
 				argEndPos = tokens.indexOfAnyParenSavvy([")",","], pos-1, endPos-1, endPos-1)
@@ -1612,7 +1593,7 @@ end function
 cmd.COLOR = new Command; cmd.COLOR._name = "cmd.COLOR"
 cmd.COLOR.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.COLOR
-	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.arg = Parser.make(tokens, startIdx+1, endIdx).parse
 	return result
 end function
 cmd.COLOR.run = function
@@ -1659,7 +1640,6 @@ cmd.DEF.parse = function(tokens, startIdx, endIdx, address)
 end function
 cmd.DEF.run = function
 	// Build a function and stuff it into the machine.
-	// (ToDo: be sure we clear these out with CLEAR.)
 	globals.wtf = self
 	exprToks = self.exprToks
 	lvar = self.lvar
@@ -1686,7 +1666,7 @@ cmd.DIM.parse = function(tokens, startIdx, endIdx, address)
 			while pos+1 < endIdx
 				nextPos = tokens.indexOfAnyParenSavvy([",", ")"], pos, endIdx)
 				if nextPos == null then return printErr("incomplete DIM statement")
-				maxIndex = Evaluator.make(tokens, pos, nextPos).parse
+				maxIndex = Parser.make(tokens, pos, nextPos).parse
 				dims.push maxIndex
 				pos = nextPos+1
 				if tokens[nextPos] == ")" then break
@@ -1741,7 +1721,7 @@ cmd.CATALOG = cmd.DIR
 cmd.EDIT = new Command; cmd.EDIT._name = "cmd.EDIT"
 cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new cmd.EDIT
-	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.arg = Parser.make(tokens, startIdx+1, endIdx).parse
 	return result
 end function
 cmd.EDIT.run = function
@@ -1801,7 +1781,7 @@ cmd.FILL.parse = function(tokens, startIdx, endIdx, address)
 		return printErr("incomplete FILL statement")
 	end if
 	result = new cmd.FILL
-	result.mode = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.mode = Parser.make(tokens, startIdx+1, endIdx).parse
 	return result
 end function
 cmd.FILL.run = function
@@ -1820,12 +1800,12 @@ cmd.FOR.parse = function(tokens, startIdx, endIdx, address)
 	if toPos == null or toPos >= endIdx then return printErr("incomplete FOR statement")
 	stepPos = tokens.indexOf("STEP", startIdx+4)
 	if stepPos == null or stepPos > endIdx then stepPos = endIdx
-	result.fromExpr = Evaluator.make(tokens, startIdx+3, toPos).parse
-	result.toExpr = Evaluator.make(tokens, toPos+1, stepPos).parse
+	result.fromExpr = Parser.make(tokens, startIdx+3, toPos).parse
+	result.toExpr = Parser.make(tokens, toPos+1, stepPos).parse
 	result.stepExpr = SNLiteral.one // Too cool for BASIC: if fromVal >= toVal then step = 1 else step = -1
 	if stepPos < endIdx then
 		if tokens.len < stepPos+2 then return printErr("incomplete FOR statement")
-		result.stepExpr = Evaluator.make(tokens, stepPos+1, endIdx).parse
+		result.stepExpr = Parser.make(tokens, stepPos+1, endIdx).parse
 	end if
 	result.address = address
 	return result
@@ -1916,7 +1896,7 @@ cmd.CLS = cmd.HOME		// CLS is an alias for HOME
 cmd.HTAB = new Command; cmd.HTAB._name = "cmd.HTAB"
 cmd.HTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
-	result.arg = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.arg = Parser.make(tokens, startIdx+1, endIdx).parse
 	return result
 end function
 cmd.HTAB.run = function
@@ -1941,7 +1921,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	if tokens.len < endIdx + 2 then
 		return printErr("incomplete THEN clause")
 	end if
-	result.condition = Evaluator.make(tokens, startIdx+1, endIdx).parse
+	result.condition = Parser.make(tokens, startIdx+1, endIdx).parse
 	result.endTokenIdx = endIdx
 	
 	// Find the end of the "then" statement(s).  This will be the
@@ -2025,7 +2005,7 @@ cmd.IMAGE.parse = function(tokens, startIdx, endIdx, address)
 	if startIdx+2 >= endIdx then return printErr("incomplete IMAGE statement")
 	commaPos = tokens.indexOfAnyParenSavvy([",", "TO"], startIdx+1, endIdx, endIdx)
 	result = new self
-	result.path = Evaluator.make(tokens, startIdx+1, commaPos).parse
+	result.path = Parser.make(tokens, startIdx+1, commaPos).parse
 	startIdx = commaPos + (tokens[commaPos] == ",")
 	result.args = getDrawingArgs(tokens, startIdx, false, false)
 	return result
@@ -2156,7 +2136,7 @@ cmd.LET.parse = function(tokens, startIdx, endIdx, address)
 	if result.lvar == null then return null
 	
 	if tokens[varEndPos] != "=" then return printErr("syntax error in assignment")
-	result.rhs = Evaluator.make(tokens, varEndPos+1, endIdx).parse
+	result.rhs = Parser.make(tokens, varEndPos+1, endIdx).parse
 	return result
 end function
 cmd.LET.run = function
@@ -2267,7 +2247,7 @@ cmd.ON.parse = function(tokens, startIdx, endIdx, address)
 	goPos = tokens.indexOfAnyParenSavvy(["GOTO", "GOSUB"], startIdx, endIdx, endIdx)
 	if goPos == endIdx then return printErr("Incomplete ON statement")
 	result = new self
-	result.arg = Evaluator.make(tokens, startIdx+1, goPos).parse
+	result.arg = Parser.make(tokens, startIdx+1, goPos).parse
 	result.targets = []		// line numbers we could jump to (0-based list)
 	result.gosub = (tokens[goPos] == "GOSUB")
 	if result.gosub then result.returnTo = address.next
@@ -2288,7 +2268,6 @@ cmd.ON.run = function
 	return machine.goTo(self.targets[targetIndex])
 end function
 
-// ToDo: file support!
 cmd.OPEN = new Command; cmd.OPEN._name = "cmd.OPEN"
 cmd.OPEN.parse = function(tokens, startIdx, endIdx, address)
 	// syntax: OPEN fileId, [mode,] path
@@ -2406,7 +2385,7 @@ cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 	pos = fileAndPos[1]
 	
 	needEOL = true
-	eval = Evaluator.make(tokens, pos, endIdx)
+	eval = Parser.make(tokens, pos, endIdx)
 	
 	while eval.nextTokIdx < endIdx
 		// Grab complete expressions even if they aren't separated
@@ -2750,7 +2729,7 @@ end function
 cmd.VTAB = new Command; cmd.VTAB._name = "cmd.VTAB"
 cmd.VTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
-	result.arg = Evaluator.make(tokens,startIdx+1, endIdx).parse
+	result.arg = Parser.make(tokens,startIdx+1, endIdx).parse
 	return result
 end function
 cmd.VTAB.run = function
@@ -2762,7 +2741,7 @@ cmd.WAIT.duration = SNLiteral.one
 cmd.WAIT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
 	if startIdx+1 < endIdx then
-		result.duration = Evaluator.make(tokens, startIdx+1, endIdx).parse
+		result.duration = Parser.make(tokens, startIdx+1, endIdx).parse
 	end if
 	return result
 end function
@@ -2829,22 +2808,6 @@ Machine.doImmediate = function(tokens)
 		if self.lineIdx != null or self.nextAddress != null then break
 	end while
 end function
-
-//Machine.runStatements = function(code, lineNum)
-//	if self.trace and lineNum >= 0 then print "#" + lineNum + " ", ""
-//	self.address.statementIndex = 0
-//	while self.address.statementIndex < code.len
-//		self.nextAddress = null
-//		code[self.statementIdx].run
-//		if controlCPressed then
-//			cmd.BREAK.run
-//			while controlCPressed; yield; end while
-//		end if
-//		if self.halt then return
-//		if self.nextAddress != null then break
-//		self.address.statementIndex += 1
-//	end while
-//end function
 
 // Compile one statement in the given set of tokens.
 // Return AST adorned with two additional values:
@@ -3096,7 +3059,7 @@ runUnitTests = function
 	assertEqual getRange([10]), {"from":10, "to":10}
 	assertEqual getRange([-20]), {"from":null, "to":20}
 	
-	e = Evaluator.make(["""foo""", 42, "+", 3, """bar"""])
+	e = Parser.make(["""foo""", 42, "+", 3, """bar"""])
 	assertEqual e.evaluate, "foo"
 	assertEqual e.nextTokIdx, 1
 	assertEqual e.evaluate, 45
@@ -3117,7 +3080,7 @@ end function
 //======================================================================
 
 runMainLoop = function
-//	env.bootOpts.controlC = false
+	env.bootOpts.controlC = false
 	machine.reset
 	cmd.HOME.run
 	runUnitTests
