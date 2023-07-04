@@ -1487,7 +1487,7 @@ Machine.fn.RND = function(n)
 end function
 Machine.fn.SGN = function(n); if requireNum(n) then return sign(n); end function
 Machine.fn.SIN = function(n); if requireNum(n) then return sin(n); end function
-Machine.fn["SPACES$"] = function(n); if requireNum(n) then return " "*n; end function
+Machine.fn["SPACE$"] = function(n); if requireNum(n) then return " "*n; end function
 Machine.fn.SPC = function(n); if requireNum(n) then print " "*n,""; return ""; end function
 Machine.fn.SQR = function(n); if requireNum(n) then return sqrt(n); end function
 Machine.fn["STR$"] = function(n); if requireNum(n) then return str(n); end function
@@ -1540,9 +1540,10 @@ cmd = {}	// global map of commands
 cmd.BREAK = new Command; cmd.BREAK._name = "cmd.BREAK"
 cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	print
-	if machine.lineIdx >= 0 and machine.lineIdx < machine.lineNums.len and
-			machine.lineNums[machine.lineIdx] >= 0 then
-		print "BREAK at line " + machine.lineNums[machine.lineIdx]
+	addr = machine.address
+	if addr.lineIndex >= 0 and addr.lineIndex < machine.lineNums.len and
+			machine.lineNums[addr.lineIndex] >= 0 then
+		print "BREAK at line " + addr.displayStr
 	else
 		print "BREAK"
 	end if
