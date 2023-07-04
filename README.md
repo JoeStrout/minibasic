@@ -27,8 +27,8 @@ You can **run MiniBASIC on the web** at [itch.io](https://joestrout.itch.io/mini
 
 If you want to do it all yourself, based on this GitHub repo, then you will need at least a preview release of Mini Micro 1.2 (because it uses some of the latest features of the MiniScript language).  So:
 
-1. grab a preview build of Mini Micro 1.2 for [Mac](https://miniscript.org/MiniMicro/preview/minimicro-mac.zip), [Windows](https://miniscript.org/MiniMicro/preview/minimicro-win.zip), or [Linux](https://miniscript.org/MiniMicro/preview/minimicro-linux.tar.gz)
-2. unpack this, and run (you might need to right-click an "open" the first time, as the app is not yet code-signed)
+1. download Mini Micro 1.2 or later from [MiniScript.org](https://miniscript.org/MiniMicro] or [itch.io](https://joestrout.itch.io/mini-micro).
+2. unpack the downloaded app, and run (you might need to right-click an "open" the first time, as the app is not yet code-signed)
 3. download or clone this repo
 4. in Mini Micro, click on the top disk slot below the screen, and choose "Mount Folder..."
 5. select the folder containing this README.md and basic.ms
