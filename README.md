@@ -4,7 +4,7 @@
 
 This is a little project to create an interpreter for the BASIC programming language for Mini Micro.  The interpreter itself is written in [MiniScript](https://miniscript.org).
 
-**NOTE:** This project requires MiniScript v1.6, coming in Mini Micro v1.2 (not yet officially released).
+**NOTE:** This project requires Mini Micro v1.2 (released July 2023).
 
 ## Current Status ##
 
