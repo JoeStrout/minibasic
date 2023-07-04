@@ -63,5 +63,5 @@
 1090 DATA "--end--"
 1100 DATA Pew, "F(0)=800: F(1)=100: SOUND F(), 0.5, 1, 3"
 1110 DATA WooOoo, "F(0)=-12: F(1)=-88: F(2)=-48: SOUND F(), 0.5, 1, 2"
-1120 DATA Fader, "V(0)=1: V(1)=0: SOUND 0.5, 2, V(), 4"
+1120 DATA Booom, "V(0)=1: V(1)=0: SOUND 0.5, 2, V(), 4"
 1190 DATA "--end--"

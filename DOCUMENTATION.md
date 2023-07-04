@@ -36,6 +36,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | ATN(_n_) | arctangent of _n_ radians; inverse of TAN |
 | CHR$(_n_) | character with the Unicode code point _n_; inverse of ASC |
 | COS(_n_) | cosine of _n_ radians |
+| EOF(_n_) | return whether file handle _n_ is at end-of-file |
 | EXP(_n_) | [e](https://en.wikipedia.org/wiki/E_(mathematical_constant))^_n_ |
 | FIX(_n_) | integer portion of _n_, i.e., whole number neighboring _n_ closest to 0 |
 | INKEY$(_z_) | pulls and returns the first character waiting in the keyboard buffer, if any, else returns "" |
@@ -58,6 +59,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | STR$(_n_) | converts number _n_ into a string using standard formatting |
 | TAB(_n_ \[, _m_\]) | given both _n_ and _m_, moves text cursor to row _m_, column _n_; given only _n_, advances the text cursor to column _n_ only if it is currently less than that; returns "" |
 | TAN(_n_) | tangent of _n_ radians |
+| TIME(_n_) | for _n_=0, time in seconds since system start; _n_=1, time since current run |
 | UPPER$(_a$_) | string _a$_ converted to uppercase; see also LOWER$ |
 | VAL(_a$_) | converts _a$_ to a number, if possible; else 0 |
 
@@ -153,6 +155,6 @@ To write data to disk, follow these steps:
 To read data from disk, follow these steps:
 
 1. Open the file with a command like `OPEN n, 0, "path/to/file.txt"`.  Again, _n_ is any nonzero number that is not already in use for some other open file.  The second parameter, 0, means to open the file in "r" (read) mode; you may also use other modes listed [here](https://miniscript.org/wiki/File.open).
-2. Read from the file with a command like `INPUT# n, A$`.  This `INPUT#` command is just like the standard `INPUT` command, except that any prompt string is ignored, and input is read from the file rather than from the console.  Note that both end-of-file and a blank line will store "" in the given string variable.  OR,
+2. Read from the file with a command like `INPUT# n, A$`.  This `INPUT#` command is just like the standard `INPUT` command, except that any prompt string is ignored, and input is read from the file rather than from the console.  Note that both end-of-file and a blank line will store "" in the given string variable (you can tell the difference with `EOF(n)`).  OR,
 3. Read a single character from the file with a command like `GET# n, A$`.  If we are at end-of-file, then GET# stores empty string into the given string variable.  If given a numeric variable, then at the end of file the value stored is -1.
 4. Close the file with `CLOSE n`.
