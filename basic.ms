@@ -2183,6 +2183,12 @@ cmd.LOAD.parse = function(tokens, startIdx, endIdx, address)
 	// as an argument, but you don't need to use quotation marks.
 	result = new self
 	args = tokens[startIdx+1:endIdx]
+	
+	// Cheap trick: a "." in the input, e.g. tests.bas, gets tokenized
+	// as a numeric literal equal to 0.  But we want LOAD to work with
+	// such inputs as intended, i.e., a dot.  So:
+	for i in args.indexes; if args[i] == 0 then args[i] = "."; end for
+
 	args.apply(@stripQuotes)
 	path = args.join("").trim
 	result.path = path - ".bas" + ".bas"
