@@ -22,3 +22,10 @@ Mar 15, 2023: v0.9.5
   + type mismatch in a function call, e.g. MID$(1, "Oops", 1)
 + Fixed issue with INPUT into string array elements
 
+
+Jul 05, 2023: v0.9.6
+====================
++ Major refactoring resulting in much better performance
++ Line numbers, reported on BREAK, now include statement index, e.g. 110:3 means the third statement on line 110
++ Added tests.bas, to auto-test many of the BASIC functions and commands
++ Fixed SPACE$ function (previously implemented as SPACES$)
