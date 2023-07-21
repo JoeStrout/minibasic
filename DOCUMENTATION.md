@@ -128,9 +128,16 @@ At the `>` interactive prompt, you may type and execute BASIC code immediately; 
 | RUN | reset DATA pointers and all variables, then run the current program from the beginning |
 | SAVE \[_path_\] | save the current program to _path_ relative to the current directory (`.bas` extension may be omitted); if _path_ is omitted, saves to the previous program path, if any |
 
-Note that at any input prompt, you can use **Control-A/Control-E** to jump to the beginning/end of the line, and hold **Alt** (or Option on Mac) to move or delete by whole words.
+Note that parsing of the file path argument for the shell commands is different from parsing for other BASIC statements; everything after the command, up to `:` or the end of the line, is taken as a single string argument.  This lets you use commands like `cd ../CC` or `load ../../demo/fern` without having to enclose the file name/path in quotes.  (However, if a file name actually includes a colon, then you will need to enclose the whole name or path in quotes.)
 
 ## Special Topics
+
+### Line Editing
+
+At the shell prompt or at any input prompt, the following editing keys are available:
+- use **Control-A/Control-E** or **Home/End** to jump to the beginning/end of the line
+- press **Backspace** to delete, or **Delete** to forward-delete
+- hold **Alt** (or Option on Mac) to move or delete by whole words.
 
 ### Graphics
 

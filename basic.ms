@@ -262,6 +262,10 @@ end function
 // Lexer (i.e. tokenizer)
 //======================================================================
 
+// Special-case tokens which, once encountered, cause the rest of the
+// line up to ":" to be parsed as a single string:
+stringArgTriggers = ["CD", "CAT", "CATALOG", "DIR", "LOAD", "SAVE"]
+
 // tokenize: take the given line af BASIC code and return a 
 // list of tokens.  Numbers will be actual numbers in the token
 // list; all others will be strings, with string literals 
@@ -323,6 +327,15 @@ tokenize = function(line)
 				// taking everything between commas as a string (ignoring only 
 				// commas in quotes)
 				isData = true
+			else if stringArgTriggers.contains(tok) then
+				// final special case: after CD, DIR, LOAD, etc.,
+				// load everything up to EOL or a colon as a single string
+				while p1 < lineLen and line[p1] != ":"
+					p1 += 1
+				end while
+				arg = line[p0:p1].trim
+				if arg then tokens.push arg
+				p0 = p1
 			end if
 		else if c == """" then
 			// lex a quoted string literal
@@ -1554,10 +1567,9 @@ end function
 cmd.CD = new Command; cmd.CD._name = "cmd.CD"
 cmd.CD.parse = function(tokens, startIdx, endIdx, address)
 	args = tokens[startIdx+1:endIdx]
-	args.apply(@stripQuotes)
-	path = args.join("").trim
+	if args.len > 1 then return printErr("invalid arguments to CD")
 	result = new cmd.CD
-	result.path = path
+	if args then result.path = stripQuotes(args[0]) else result.path = ""
 	return result
 end function
 cmd.CD.run = function(tokens, startIdx, endIdx)
@@ -1705,12 +1717,9 @@ end function
 cmd.DIR = new Command; cmd.DIR._name = "cmd.DIR"
 cmd.DIR.parse = function(tokens, startIdx, endIdx, redim=false)
 	result = new cmd.DIR
-	// NOTE: DIR is different from other commands; it cannot take
-	// a variable as an argument (but, it does not require you
-	// to put quotes around the path)
 	args = tokens[startIdx+1:endIdx]
-	args.apply(@stripQuotes)
-	result.path = args.join("").trim
+	if args.len > 1 then return printErr("invalid arguments to DIR")
+	if args then result.path = stripQuotes(args[0]) else result.path = ""
 	return result
 end function
 cmd.DIR.run = function
@@ -2179,23 +2188,18 @@ cmd.LISTREM.remOnly = true
 
 cmd.LOAD = new Command; cmd.LOAD._name = "cmd.LOAD"
 cmd.LOAD.parse = function(tokens, startIdx, endIdx, address)
-	// like DIR, this command is special; it can't take a variable
-	// as an argument, but you don't need to use quotation marks.
 	result = new self
 	args = tokens[startIdx+1:endIdx]
-	
-	// Cheap trick: a "." in the input, e.g. tests.bas, gets tokenized
-	// as a numeric literal equal to 0.  But we want LOAD to work with
-	// such inputs as intended, i.e., a dot.  So:
-	for i in args.indexes; if args[i] == 0 then args[i] = "."; end for
-
-	args.apply(@stripQuotes)
-	path = args.join("").trim
-	result.path = path - ".bas" + ".bas"
+	if args.len != 1 then return printErr("invalid arguments to LOAD")
+	result.path = stripQuotes(args[0])
 	return result
 end function
 cmd.LOAD.run = function
 	lines = file.readLines(self.path)
+	if lines == null and not self.path.endsWith(".bas") then
+		lines = file.readLines(self.path + ".bas")
+		if lines then self.path += ".bas"
+	end if
 	if lines == null then
 		print "Unable to read program " + self.path
 	else
@@ -2645,12 +2649,10 @@ end function
 
 cmd.SAVE = new Command; cmd.SAVE._name = "cmd.SAVE"
 cmd.SAVE.parse = function(tokens, startIdx, endIdx, address)
-	// like DIR and LOAD, the SAVE command takes a path
-	// without quotation marks (and so cannot use an expression)
 	result = new self
 	args = tokens[startIdx+1:endIdx]
-	args.apply(@stripQuotes)
-	result.path = args.join("").trim
+	if args.len > 1 then return printErr("invalid arguments to SAVE")
+	if args then result.path = stripQuotes(args[0]) else result.path = ""
 	return result
 end function
 cmd.SAVE.run = function
@@ -3052,8 +3054,7 @@ runUnitTests = function
 	assertEqual a.indexOfAny([")", "*"], 6), null
 	assertEqual a.indexOfAny([")", "*"], 6, -1), -1
 	assertEqual a.findCloseParen(1), 6
-	
-	
+		
 	a = tokenize("PRINT LEFT$(A$,5), MID$(A$,LEN(A$)/2), RIGHT$(A$,F(X,4))")
 	assertEqual a.indexOfAnyParenSavvy(","), 6
 	assertEqual a.indexOfAnyParenSavvy(",", 1), 3
@@ -3065,6 +3066,22 @@ runUnitTests = function
 	assertEqual getRange([10, "-"]), {"from":10, "to":null}
 	assertEqual getRange([10]), {"from":10, "to":10}
 	assertEqual getRange([-20]), {"from":null, "to":20}
+	
+	// Our tokenizer recognizes a couple of special cases, where everything up
+	// to `:` is parsed as a single string.  This is used for cd, load, dir, etc.
+	// (file-argument commands) and must work with or without a line number.
+	a = tokenize("cd foo/bar/00_baz")
+	assertEqual a[0], "CD"
+	assertEqual a[1], "foo/bar/00_baz"
+	a = tokenize("10dir 10_Blackjack/MiniScript")
+	assertEqual a[0], 10
+	assertEqual a[1], "DIR"
+	assertEqual a[2], "10_Blackjack/MiniScript"
+	a = tokenize("load some/program:run")
+	assertEqual a[0], "LOAD"
+	assertEqual a[1], "some/program"
+	assertEqual a[2], ":"
+	assertEqual a[3], "RUN"
 	
 	e = Parser.make(["""foo""", 42, "+", 3, """bar"""])
 	assertEqual e.evaluate, "foo"
@@ -3092,7 +3109,7 @@ runMainLoop = function
 	cmd.HOME.run
 	runUnitTests
 
-	print "MiniBASIC 0.9.6"
+	print "MiniBASIC 0.9.7"
 
 	globals.basic = function
 		reset

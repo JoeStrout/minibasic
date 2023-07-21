@@ -29,3 +29,9 @@ Jul 05, 2023: v0.9.6
 + Line numbers, reported on BREAK, now include statement index, e.g. 110:3 means the third statement on line 110
 + Added tests.bas, to auto-test many of the BASIC functions and commands
 + Fixed SPACE$ function (previously implemented as SPACES$)
+
+
+Jul 21, 2023: v0.9.7
+====================
++ Changed tokenizing on shell path commends (CAT, CD, DIR, LOAD, SAVE) so that you no longer need to quote file paths unless they contain a colon.
++ Updated the documentation.
