@@ -3131,7 +3131,7 @@ runMainLoop = function
 			while controlCPressed; yield; end while
 			continue
 		end if
-		if line.lower == "exit" then break
+		if line.lower.trim == "exit" then break
 		repl line
 		if machine.doRunRunRun then machine.runProgram
 	end while
