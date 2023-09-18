@@ -389,6 +389,11 @@ tokenize = function(line)
 			else if (toki == ">" or toki == "<") and "<>=".contains(tokj) then
 				tokens[i] = toki + tokj
 				tokens.remove i+1
+			else if toki == "=" and tokj == "=" then
+				// == is not actually a valid BASIC operator, but we'll
+				// combine them here and throw an error further on
+				tokens[i] = "=="
+				tokens.remove i+1
 			end if
 		end for
 	end if
@@ -724,6 +729,7 @@ Parser.doBinop = function
 	op = self.popOperator
 	if machine.halt then return
 	opA = self.popValue
+	print "doBinop: got " + op
 	if op == "+" then
 		self.pushValue SNAdd.make(opA, opB)
 	else if op == "-" then
@@ -917,6 +923,8 @@ Parser.parse = function()
 			self.push tok, SE.operator
 			canBail = false
 			self.debugPrint "Pushed operator: " + tok
+		else if tok == "==" then
+			return printErr("invalid operator: ==")
 		else
 			// push an identifier			
 			if canBail then break
