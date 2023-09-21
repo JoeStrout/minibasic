@@ -2916,6 +2916,7 @@ end function
 
 
 //Debugger added by chinhouse
+// DEBUGON/DEBUGOFF - turns on/off the debugger. No parameters.
 cmd.DEBUGON = new Command; cmd.DEBUGON._name = "cmd.DEBUGON"
 cmd.DEBUGON.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -2948,6 +2949,13 @@ cmd.DEBUGOFF.run = function
 	_printMark "To turn it on, type: `DEBUGON`", "#00FF00"
 end function
 
+// WATCH = adds/removes variables from the watchlist. Accepts
+//    scalars and vectors. Use + or - to add/remove:
+//    WATCH + A B C - D E(
+//        A,B, and C are added, while D and array E are removed
+//    "+" isn't needed if the first set of variables listed
+// Along with BRKPOINT, I need better parameter checking
+//    are to be added.
 cmd.WATCH = new Command; cmd.WATCH._name = "cmd.WATCH"
 cmd.WATCH.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -2976,6 +2984,9 @@ cmd.WATCH.run = function
 	pprint(machine.debug.watchList)
 end function
 	
+// BRKPOINT = adds/removes breakpoints. Usage is similar to WATCH
+//    BRKPOINT 10 - 20 + 100
+//    adds line 10, then removes line 20, then adds line 100
 cmd.BRKPOINT = new Command; cmd.BRKPOINT._name = "cmd.BRKPOINT"
 cmd.BRKPOINT.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -3004,7 +3015,7 @@ cmd.BRKPOINT.run = function
 end function
 	
 //Called by Machine.runOneLine if the debugger is on.
-//F5 - to toggle play/pause
+//F5 - to toggle play/run
 //F6 - to step to the next instruction
 //F7 - move the debug output around the screen. Has four positions.
 //F8 - toggle breakpoints - enable/disable
@@ -3063,7 +3074,7 @@ Machine.showDebugger = function(tokens, startTokenIndex)
 		end if
 	end for
 	dbgLines.push("Breakpoints: " + ["OFF", "ON"][self.debug.breaksOn])
-	dbgLines.push("F5 PAUSE/PLAY   F6 NEXT STEP")
+	dbgLines.push("F5 PAUSE/RUN    F6 NEXT STEP")
 	dbgLines.push("F7 MOVE OUTPUT  F8 BREAKPOINTS")
 	dbgLines.push("F9 TURN OFF DEBUGGER")
 	
@@ -3138,7 +3149,7 @@ Machine.showDebugger = function(tokens, startTokenIndex)
 	
 	// returning false moves us to the next statement 
 	// to execute. F7 returns true, so the output can
-	// move without moving forward
+	// change w/o moving to the next stmt
 	return false
 end function
 
