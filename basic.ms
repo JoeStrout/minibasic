@@ -729,7 +729,6 @@ Parser.doBinop = function
 	op = self.popOperator
 	if machine.halt then return
 	opA = self.popValue
-	print "doBinop: got " + op
 	if op == "+" then
 		self.pushValue SNAdd.make(opA, opB)
 	else if op == "-" then
