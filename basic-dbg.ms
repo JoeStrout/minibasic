@@ -16,7 +16,7 @@ keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM 
   "BREAK CLEAR CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
   "COLOR LINE PLOT FILL RECT ELLIPSE POLY IMAGE PEN".split +
   "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER EDIT".split +
-  "DEBUGON DEBUGOFF WATCH BRKPOINT".split
+  "FIND DEBUGON DEBUGOFF WATCH BRKPOINT".split
 
 // BASIC operators:
 operators = "( ) EQV IMP XOR OR AND NOT = <> < > <= >= + - * / \ MOD ^".split
@@ -34,7 +34,7 @@ isNumericChar = function(c)
 	return (c >= "0" and c <= "9")
 end function
 
-isIdentifierChar = function(c)
+isIdentifierChar = function(c)	
 	return (c >= "0" and c <= "9") or
 	  (c >= "A" and c <= "Z") or
 	  (c >= "a" and c <= "z") or
@@ -2914,8 +2914,38 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	end while
 end function
 
+//Debugger and other tools added by chinhouse
+// FIND - find a specific tokenized item
+// FIND <token> [line range like in LIST/LISTREM]
+cmd.FIND = new Command; cmd.FIND._name = "cmd.FIND"
+cmd.FIND.parse = function(tokens, startIdx, endIx, address)
+	result = new self
+	result.args = [tokens, startIdx, endIx]
+	return result
+end function
+cmd.FIND.run = function
+	machine.sortLines
+	machine.findComeFroms
+	
+	// how to check that its syntax is correct?
+	_tokens = self.args[0]
+	startIdx = self.args[1]
+	endIx = self.args[2]
+	
+	if startIdx + 1 > _tokens.len - 1 then return printErr("Incomplete FIND statement.")
+	searchTerm = _tokens[startIdx + 1]
+	lineRange = getRange(_tokens[startIdx + 2:endIx])
+	for lineNum in machine.lineNums
+		if lineNum < 0 then continue
+		if lineRange.from != null and lineNum < lineRange.from then continue
+		if lineRange.to != null and lineNum > lineRange.to then continue
+		tokens = machine.program[lineNum]
+		
+		if tokens.indexOf(searchTerm) == null then continue
+		listOneLine lineNum, tokens
+	end for
+end function
 
-//Debugger added by chinhouse
 // DEBUGON/DEBUGOFF - turns on/off the debugger. No parameters.
 cmd.DEBUGON = new Command; cmd.DEBUGON._name = "cmd.DEBUGON"
 cmd.DEBUGON.parse = function(tokens, startIdx, endIdx, address)
