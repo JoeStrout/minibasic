@@ -34,7 +34,7 @@ isNumericChar = function(c)
 	return (c >= "0" and c <= "9")
 end function
 
-isIdentifierChar = function(c)	
+isIdentifierChar = function(c)
 	return (c >= "0" and c <= "9") or
 	  (c >= "A" and c <= "Z") or
 	  (c >= "a" and c <= "z") or
@@ -730,7 +730,6 @@ Parser.doBinop = function
 	op = self.popOperator
 	if machine.halt then return
 	opA = self.popValue
-	//print "doBinop: got " + op
 	if op == "+" then
 		self.pushValue SNAdd.make(opA, opB)
 	else if op == "-" then
@@ -1751,7 +1750,7 @@ cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	return result
 end function
 cmd.EDIT.run = function
-	if self.arg == null then return printErr("Line number required.")
+	if self.arg == null then return printErr("line number required.")
 	lineNum = self.arg.eval
 	if not machine.program.hasIndex(lineNum) then return printErr("invalid line number")
 	lineText = getLineAsText(lineNum, machine.program[lineNum])
@@ -2860,7 +2859,6 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	if not result then return
 	result.startTokenIdx = startIdx
 	if not result.hasIndex("endTokenIdx") then result.endTokenIdx = statementEnd
-	
 	return result
 end function
 
@@ -2932,7 +2930,7 @@ cmd.FIND.run = function
 	startIdx = self.args[1]
 	endIx = self.args[2]
 	
-	if startIdx + 1 > _tokens.len - 1 then return printErr("Incomplete FIND statement.")
+	if startIdx + 1 > _tokens.len - 1 then return printErr("incomplete FIND statement.")
 	searchTerm = _tokens[startIdx + 1]
 	lineRange = getRange(_tokens[startIdx + 2:endIx])
 	for lineNum in machine.lineNums

@@ -1742,6 +1742,7 @@ cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	return result
 end function
 cmd.EDIT.run = function
+	if self.arg == null then return printErr("line number required.")
 	lineNum = self.arg.eval
 	if not machine.program.hasIndex(lineNum) then return printErr("invalid line number")
 	lineText = getLineAsText(lineNum, machine.program[lineNum])
@@ -2764,7 +2765,6 @@ end function
 cmd.WAIT.run = function
 	wait val(self.duration.eval)
 end function
-
 
 // Run one statement within the given set of tokens,
 // returning the token that starts the NEXT statement
