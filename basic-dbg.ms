@@ -574,10 +574,10 @@ SNArrayOrCall.eval = function(c)
 	if @f then
 		// it's a function — invoke it!
 		if not args then return printErr("argument required for function call")
- 		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
- 		result = f(args)
- 		if machine.halt then return
- 		return result
+		if args.len == 1 then args = args[0]	// (pass single argument as scalar)
+		result = f(args)
+		if machine.halt then return
+		return result
 	else if array != null then
 		// it's an array; look up the value (walking through dimensions
 		// of the array one at a time, until we have just a scalar left)
@@ -673,7 +673,7 @@ end function
 
 Parser.debugPrint = function(s)
 	// Uncomment this line to see lots of helpful debugging output:
-//	text.color = "#008800"; print s; text.color = gfx.color
+	//	text.color = "#008800"; print s; text.color = gfx.color
 end function
 
 Parser.stackStr = function
@@ -845,7 +845,7 @@ Parser.parse = function()
 	self.debugPrint "Parser.parse(" + self.tokens[self.nextTokIdx:self.endIdx] + ")"
 	self.stack = []
 	canBail = false	// marks points where we can bail out if we start a new value
-
+	
 	pos = self.nextTokIdx
 	while pos < self.endIdx
 		tok = self.tokens[pos]
@@ -895,8 +895,8 @@ Parser.parse = function()
 			if canBail then break
 			self.pushValue tok
 			if self.stack.len > 1 and self.stack[-2] == "-" and
-					(self.stack.len == 2 or (self.stack[-3] isa string and 
-					self.stack[-3].isOpenParen)) then
+			(self.stack.len == 2 or (self.stack[-3] isa string and 
+			self.stack[-3].isOpenParen)) then
 				self.doUnaryOp
 			end if
 			canBail = true
@@ -929,16 +929,16 @@ Parser.parse = function()
 			// push an identifier			
 			if canBail then break
 			self.push SNIdentifier.make(tok), SE.node
-//			if customLocals != null and customLocals.hasIndex(tok) then
-//				value = customLocals[tok]
-//			else
-//				value = getValue(tok)
-//				if value == null then return null
-//			end if
-//			self.pushValue value
+			//			if customLocals != null and customLocals.hasIndex(tok) then
+			//				value = customLocals[tok]
+			//			else
+			//				value = getValue(tok)
+			//				if value == null then return null
+			//			end if
+			//			self.pushValue value
 			if self.stack.len > 1 and self.stack[-2] == "-" and
-					(self.stack.len == 2 or (self.stack[-3] isa string and 
-					self.stack[-3].endsWith("("))) then
+			(self.stack.len == 2 or (self.stack[-3] isa string and 
+			self.stack[-3].endsWith("("))) then
 				self.doUnaryOp
 			end if
 			canBail = true
@@ -1056,12 +1056,12 @@ printErr = function(err, addr)
 	if addr == null then addr = machine.address
 	loc = ""
 	if addr.lineIndex >= 0 and machine.lineNums.hasIndex(addr.lineIndex) and
-			machine.lineNums[addr.lineIndex] >= 0 then
+	machine.lineNums[addr.lineIndex] >= 0 then
 		loc = " in line " + addr.displayStr
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
-//	pprint stackTrace; exit
+	//	pprint stackTrace; exit
 end function
 
 getValue = function(identifier, customLocals=null)
@@ -1387,8 +1387,9 @@ Machine.debug.ON = false	// is debugger active?
 Machine.debug.watchList = []// variable watch list
 Machine.debug.breakList = []// line break list
 Machine.debug.breaksOn = true // are breakpoints enabled
-Machine.debug.paused = true // is debugger paused
+Machine.debug.paused = false // is debugger paused
 Machine.debug.location = 0  // location for dbg location: 0 - upper right corner, until 3 going clockwise
+Machine.debug.screen = displayMode.off
 
 Machine.resetData = function
 	self.vars = {"ON":1, "OFF":0, "TRUE":1, "FALSE":0, "PI":pi}
@@ -1499,7 +1500,7 @@ Machine.fn.POS = function(n)
 	if round(n) % 2 then return 26 - text.row else return text.column + 1
 end function
 Machine.fn.PLOTPOS = function(n)
-//	print "in PLOTPOS with arg " + n
+	//	print "in PLOTPOS with arg " + n
 	if round(n) % 2 then return machine.plotPos[1] else return machine.plotPos[0]
 end function
 Machine.fn["RIGHT$"] = function(args)
@@ -1570,7 +1571,7 @@ cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	print
 	addr = machine.address
 	if addr.lineIndex >= 0 and addr.lineIndex < machine.lineNums.len and
-			machine.lineNums[addr.lineIndex] >= 0 then
+	machine.lineNums[addr.lineIndex] >= 0 then
 		print "BREAK at line " + addr.displayStr
 	else
 		print "BREAK"
@@ -1656,7 +1657,7 @@ cmd.DEF.parse = function(tokens, startIdx, endIdx, address)
 		// normalize, e.g., FNSQ --> FN SQ
 		result.lvar.id = "FN " + result.lvar.id[2:].upper
 	end if
-
+	
 	if result.lvar == null then return
 	if not result.lvar.isArrayElem then return printErr("user function requires 1 argument")
 	// next should be the `=`
@@ -1849,7 +1850,7 @@ cmd.GET.parse = function(tokens, startIdx, endIdx, address)
 	if fileAndPos == null then return
 	result.fileId = fileAndPos[0]
 	pos = fileAndPos[1]
-
+	
 	result.lvar = Lvar.make(tokens, pos, endIdx)
 	if result.lvar == null then return printErr("incomplete GET statement")
 	return result
@@ -1938,7 +1939,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	// 	   and when we hit ELSE, skip to the next line.
 	//  2. If the condition is false, then find the matching ELSE
 	//	   token, discounting as many ELSEs as we see THENs on the way.
-
+	
 	result = new self
 	
 	if endIdx >= tokens.len or tokens[endIdx] != "THEN" then	
@@ -1980,7 +1981,7 @@ cmd.IF.parse = function(tokens, startIdx, endIdx, address)
 	else
 		result.thenJumpTo = address.next
 	end if
-
+	
 	// Now, find the matching ELSE clause to jump to if the condition is false.
 	extraElses = 0
 	statementIdx = address.statementIndex + 1
@@ -2071,7 +2072,7 @@ cmd.INPUT.parse = function(tokens, startIdx, endIdx, address)
 	//		- when inputting a number, trims and stops at whitespace or comma
 	//		- when inputting a string, stops at comma UNLESS it is the last
 	//		  variable in the input list, in which case it continues to EOL.
-
+	
 	result = new self
 	
 	fileAndPos = getFile(tokens, startIdx)
@@ -2420,11 +2421,11 @@ cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
 		// and you can find old BASIC programs that actually use this.  :(		
 		endPos = tokens.indexOfAnyParenSavvy([",",";"], pos-1, endIdx, endIdx)
 		if pos == endIdx then break			
-//		print "Now to print: " + tokens[pos:endPos]
+		//		print "Now to print: " + tokens[pos:endPos]
 		eval.nextTokIdx = pos
 		eval.endIdx = endPos
 		arg = eval.parse
-//		print "Tokens " + pos + ":" + endPos + " parses to " + arg
+		//		print "Tokens " + pos + ":" + endPos + " parses to " + arg
 		if arg == null then break
 		result.args.push arg
 		if eval.nextTokIdx < endIdx then
@@ -2497,7 +2498,7 @@ cmd.READ.run = function
 	for lvar in self.lvars
 		if machine.nextDataIdx >= machine.data.len then return printErr("out of DATA")
 		value = stripQuotes(machine.data[machine.nextDataIdx])
-//		print "READ " + machine.nextDataIdx + ": " + lvar.str + " = " + value
+		//		print "READ " + machine.nextDataIdx + ": " + lvar.str + " = " + value
 		machine.nextDataIdx += 1
 		if isStringId(lvar.id) and not value isa string then value = str(value)
 		setValue lvar, value
@@ -2559,7 +2560,7 @@ cmd.RENUMBER.run = function
 	startRange = new self.startRange
 	if startRange.from == null then startRange.from = 0
 	if startRange.to == null then startRange.to = machine.lineNums[-1]
-
+	
 	// start by finding our source lines and building a map to new lines
 	remap = {}	// key: old line number; value: new line number
 	newPgm = {}	// key: new line number; value: tokens for that line
@@ -2740,7 +2741,7 @@ cmd.SOUND.run = function
 	else
 		waveform = val(waveform)
 		options = [Sound.sineWave, Sound.triangleWave, Sound.sawtoothWave, 
-					Sound.squareWave, Sound.noiseWave]
+		Sound.squareWave, Sound.noiseWave]
 		if waveform < 0 then waveform = 0
 		if waveform >= options.len then waveform = options.len - 1
 		wave = options[waveform]
@@ -2796,9 +2797,9 @@ Machine.runOneStatement = function(tokens, startTokenIndex)
 		printErr "Command not found: " + cmdName
 		return null
 	end if
-//	print "found parse." + cmdName
+	//	print "found parse." + cmdName
 	cmdRunner = cmdObj.parse(tokens, startTokenIndex, statementEnd)
-//	print "calling cmd." + cmd + " with " + tokens + "[" + startTokenIndex + ":" + statementEnd + "]"
+	//	print "calling cmd." + cmd + " with " + tokens + "[" + startTokenIndex + ":" + statementEnd + "]"
 	if cmdRunner then
 		// Most commands don't alter the next statement to run,
 		// but a few do.  Give each one a chance to return the
@@ -2898,7 +2899,7 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 	if not self.lineNums then return
 	self.code = {}
 	self.timeAtRun = time
-//	machine.trace = true
+	//	machine.trace = true
 	if self.halt and startLineNum >= 0 then return
 	idx = 0
 	while idx < self.lineNums.len and self.lineNums[idx] < startLineNum
@@ -2913,7 +2914,9 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 end function
 
 //Debugger and other tools added by chinhouse
-// FIND - find a specific tokenized item
+// FIND - find a specific tokenized item, case insensitive search.
+//        Search for a specific string by enclosing it in quotes
+//        then search will be within literal strings.
 // FIND <token> [line range like in LIST/LISTREM]
 cmd.FIND = new Command; cmd.FIND._name = "cmd.FIND"
 cmd.FIND.parse = function(tokens, startIdx, endIx, address)
@@ -2925,21 +2928,42 @@ cmd.FIND.run = function
 	machine.sortLines
 	machine.findComeFroms
 	
-	// how to check that its syntax is correct?
 	_tokens = self.args[0]
 	startIdx = self.args[1]
 	endIx = self.args[2]
 	
 	if startIdx + 1 > _tokens.len - 1 then return printErr("incomplete FIND statement.")
 	searchTerm = _tokens[startIdx + 1]
+	isString = searchTerm isa string
+	isQuoted = isString and searchTerm[0] == """"
+	isEmptyString = searchTerm == """"""
+	
+	if isQuoted and (searchTerm.len == 1 or searchTerm[-1] != """") then return printErr("incomplete string")
+	if isQuoted and not isEmptyString then searchTerm = searchTerm[1:-1]
+	if isString then searchTerm = searchTerm.lower
+	
 	lineRange = getRange(_tokens[startIdx + 2:endIx])
 	for lineNum in machine.lineNums
 		if lineNum < 0 then continue
 		if lineRange.from != null and lineNum < lineRange.from then continue
 		if lineRange.to != null and lineNum > lineRange.to then continue
-		tokens = machine.program[lineNum]
 		
-		if tokens.indexOf(searchTerm) == null then continue
+		tokens = machine.program[lineNum]
+		if isString and not isEmptyString then
+			wasFound = false
+			for i in range(0, tokens.len - 1)
+				curTok = tokens[i]
+				if curTok isa string then
+					curTok = curTok.lower
+					wasFound = isQuoted and curTok[0]== """" and curTok.indexOf(searchTerm) != null
+					wasFound += isString and searchTerm == curTok
+					if wasFound then break
+				end if
+			end for
+			if not wasFound then continue
+		else if tokens.indexOf(searchTerm) == null then
+			continue
+		end if
 		listOneLine lineNum, tokens
 	end for
 end function
@@ -2982,12 +3006,19 @@ end function
 //    WATCH + A B C - D E(
 //        A,B, and C are added, while D and array E are removed
 //    "+" isn't needed if the first set of variables listed
-// Along with BRKPOINT, I need better parameter checking
-//    are to be added.
 cmd.WATCH = new Command; cmd.WATCH._name = "cmd.WATCH"
-cmd.WATCH.parse = function(tokens, startIdx, endIdx, address)
+cmd.WATCH.parse = function (tokens, startIdx, endIdx, address)
+	args = tokens[startIdx + 1:endIdx]
+	retval = []
+	for arg in args
+		while arg isa string and arg.len > 0 and "-+".indexOf(arg[0]) != null
+			retval.push(arg[0])
+			arg = arg[1:]
+		end while
+		if arg != "" then retval.push(arg)
+	end for
 	result = new self
-	result.args = tokens[startIdx+1:endIdx]
+	result.args = retval
 	return result
 end function
 cmd.WATCH.run = function
@@ -3011,16 +3042,12 @@ cmd.WATCH.run = function
 	end for
 	pprint(machine.debug.watchList)
 end function
-	
+
 // BRKPOINT = adds/removes breakpoints. Usage is similar to WATCH
 //    BRKPOINT 10 - 20 + 100
 //    adds line 10, then removes line 20, then adds line 100
 cmd.BRKPOINT = new Command; cmd.BRKPOINT._name = "cmd.BRKPOINT"
-cmd.BRKPOINT.parse = function(tokens, startIdx, endIdx, address)
-	result = new self
-	result.args = tokens[startIdx+1:endIdx]
-	return result
-end function
+cmd.BRKPOINT.parse = @cmd.WATCH.parse
 cmd.BRKPOINT.run = function
 	parameters = self.args
 	addFlag = true
@@ -3031,6 +3058,9 @@ cmd.BRKPOINT.run = function
 		else if param == "-" then
 			addFlag = false
 		else
+			if param isa string then
+				param = param.val
+			end if
 			foundIdx = machine.debug.breakList.indexOf(param)
 			if addFlag and foundIdx == null then
 				machine.debug.breakList.push(param)
@@ -3041,7 +3071,7 @@ cmd.BRKPOINT.run = function
 	end for
 	pprint(machine.debug.breakList)
 end function
-	
+
 //Called by Machine.runOneLine if the debugger is on.
 //F5 - to toggle play/run
 //F6 - to step to the next instruction
@@ -3050,17 +3080,42 @@ end function
 //F9 - added only because I couldn't figure out to incorporate ControlC
 //     to break out. This turns off the debug, effectively it's DEBUGOFF.
 //     Debug output disappears and ControlC is re-enabled.
-//Need to modularize this further. 
+Machine.debug.keyClear = function(fk); while key.pressed(fk);yield; end while; end function
+
+Machine.debug.getFk = function
+	f5 = key.pressed("f5") * 1
+	f6 = key.pressed("f6") * 2
+	f7 = key.pressed("f7") * 3
+	f8 = key.pressed("f8") * 4
+	f9 = key.pressed("f9") * 5
+	return ["", "f5", "f6", "f7", "f8", "f9"][f5 + f6 + f7 + f8 + f9]
+end function
+
+Machine.debug.f5 = function; machine.debug.paused = not (machine.debug.paused); return false; end function
+Machine.debug.f6 = function; return false; end function
+Machine.debug.f7 = function; machine.debug.location = (machine.debug.location + 1) % 4; return true; end function
+Machine.debug.f8 = function; machine.debug.breaksOn = not (machine.debug.breaksOn); return true; end function
+Machine.debug.f9 = function
+	machine.debug.ON = false
+	machine.debug.screen.mode = displayMode.off
+	return false
+end function
+
 Machine.showDebugger = function(tokens, startTokenIndex)
 	kDbgWidth = 34 // half the screen width
 	display(0).mode = displayMode.text
-	dbgScr = display(0)
-	dbgScr.color = text.color
-	dbgScr.backColor = text.backColor
-	dbgScr.clear
-	dbgScr.color = "#FFFFFF"
-	dbgScr.backColor = "#FF0000"
-
+	self.debug.screen = display(0)
+	machine.debug.screen.color = text.color
+	machine.debug.screen.backColor = text.backColor
+	machine.debug.screen.clear
+	//machine.debug.screen.color = "#FFFFFF"
+	machine.debug.screen.backColor = "#7F8C8D"
+	
+	lineNumColor = "#FFFFFF"
+	stmtColor = "#1A5276"
+	varColor = "#F5B041"
+	funcColor = "#FFFFFF"
+	
 	addr = self.address
 	lineNum = self.lineNums[addr.lineIndex]
 	tokens = self.program[lineNum]
@@ -3075,41 +3130,43 @@ Machine.showDebugger = function(tokens, startTokenIndex)
 	isLineBeginning = startIdx == 0
 	
 	if isBreakpointLine and isLineBeginning and not self.debug.paused then
-		dbgLines.push("Break at " + lineNum)
+		dbgLines.push(["Break at " + lineNum, lineNumColor])
 		self.debug.paused = true
 	else
-		dbgLines.push("Line " + lineNum)
+		dbgLines.push(["Line " + lineNum, lineNumColor])
 	end if
 	
-	dbgLines.push(statement)
+	dbgLines.push([statement, stmtColor])
 	for i in self.debug.watchList
-		if self.vars.hasIndex(i) then dbgLines.push(i + "=" + self.vars[i])
-	end for
-	
-	for i in self.debug.watchList
-		if i[-1] != "(" then continue
-		i = i[:-1]
-		if self.arrs.hasIndex(i) then
-			arrays = i + "()=" + self.arrs[i].join(",")
-			// arbitrary -- for arrays allow for multiple rows
-			// but up to a max of 3 rows
-			arrays = arrays[:kDbgWidth * 3]
-
-			for j in range(0, arrays.len-1, kDbgWidth)
-				line = arrays[j:j+kDbgWidth]
-				dbgLines.push(line)
-			end for
+		if self.vars.hasIndex(i) then
+			dbgLines.push([i + "=" + self.vars[i], varColor])
+		else if i[-1] != "(" then
+			continue
+		else
+			i = i[:-1]
+			if self.arrs.hasIndex(i) then
+				arrays = i + "()=" + self.arrs[i].join(",")
+				// arbitrary -- for arrays allow for multiple rows
+				// but up to a max of 3 rows
+				arrays = arrays[:kDbgWidth * 3]
+				
+				for j in range(0, arrays.len-1, kDbgWidth)
+					line = arrays[j:j+kDbgWidth]
+					dbgLines.push([line, varColor])
+				end for
+			end if
 		end if
 	end for
-	dbgLines.push("Breakpoints: " + ["OFF", "ON"][self.debug.breaksOn])
-	dbgLines.push("F5 PAUSE/RUN    F6 NEXT STEP")
-	dbgLines.push("F7 MOVE OUTPUT  F8 BREAKPOINTS")
-	dbgLines.push("F9 TURN OFF DEBUGGER")
+	
+	dbgLines.push(["Breakpoints: " + ["OFF", "ON"][self.debug.breaksOn], funcColor])
+	dbgLines.push(["F5 PAUSE/RUN    F6 NEXT STEP", funcColor])
+	dbgLines.push(["F7 MOVE OUTPUT  F8 BREAKPOINTS", funcColor])
+	dbgLines.push(["F9 TURN OFF DEBUGGER", funcColor])
 	
 	if machine.debug.location == 0 or machine.debug.location == 3 then
-		dbgScr.row = 25
+		machine.debug.screen.row = 25
 	else
-		dbgScr.row = dbgLines.len
+		machine.debug.screen.row = dbgLines.len
 	end if 
 	
 	if machine.debug.location == 0 or machine.debug.location == 1 then
@@ -3118,69 +3175,32 @@ Machine.showDebugger = function(tokens, startTokenIndex)
 		dbgCol = 0
 	end if
 	for line in dbgLines
-		dbgScr.column =dbgCol
-		dbgScr.print(line[0:kDbgWidth])
+		machine.debug.screen.color = line[1]
+		machine.debug.screen.column =dbgCol
+		machine.debug.screen.print(line[0][0:kDbgWidth])
 	end for
-
-	keyClear = function(keyname)
-		while key.pressed(keyname)
-			yield
-		end while
-		return
-	end function
 	
 	if self.debug.paused then
 		while true
-			f5 = key.pressed("f5")
-			f6 = key.pressed("f6")
-			f7 = key.pressed("f7")
-			f8 = key.pressed("f8")
-			f9 = key.pressed("f9")
-			if f6 then
-				keyClear("f6")
-				break
-			else if f5 then
-				keyClear("f5")
-				self.debug.paused = false
-				break
-			else if f7 then
-				keyClear("f7")
-				self.debug.location = (self.debug.location + 1) % 4
-				return true
-			else if f9 then
-				keyClear("f9")
-				self.debug.ON = false
-				dbgScr.mode = displayMode.off
-				break
-			else if f8 then
-				keyClear("f8")
-				self.debug.breaksOn = not self.debug.breaksOn
-				return true
+			fk = machine.debug.getFk
+			if fk != "" then
+				machine.debug.keyClear(fk)
+				fkFunc= @Machine.debug[fk]
+				return fkFunc
 			end if
 		end while
-	else if key.pressed("f5") then
-		keyClear("f5")
-		self.debug.paused = true
-	else if key.pressed("f7") then
-		keyClear("f7")
-		self.debug.location = (self.debug.location + 1) % 4
-		return true
-	else if key.pressed("f9") then
-		keyClear("f9")
-		self.debug.ON = false
-		dbgScr.mode = displayMode.off
-	else if key.pressed("f8") then
-		keyClear("f8")
-		self.debug.breaksOn = not self.debug.breaksOn
-		return true
+	else
+		fk = machine.debug.getFk
+		if fk != "" then
+			machine.debug.keyClear(fk)
+			fkFunc= @Machine.debug[fk]
+			return fkFunc
+		end if
 	end if
 	
 	// returning false moves us to the next statement 
-	// to execute. F7 returns true, so the output can
-	// change w/o moving to the next stmt
 	return false
 end function
-
 
 // Execute all the statements in the current line, returning when
 // we run out of statements or when some command jumps us to a
@@ -3203,11 +3223,11 @@ Machine.runOneLine = function
 		self.compileLine addr.lineIndex
 	end if
 	code = self.code[lineNum]
-
+	
 	while addr.statementIndex < code.len	
 		if self.trace and lineNum >= 0 then print addr.displayStr
 		self.nextAddress = null
-
+		
 		if lineNum >= 0 then
 			while self.debug.ON and self.showDebugger
 			end while
@@ -3328,7 +3348,7 @@ runUnitTests = function
 			globals.expected = expected
 		end if
 	end function
-
+	
 	assertEqual tokenize("10print""Hello""+42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("10 ?""Hello""  +   42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("5-2"), [5, "-", 2]
@@ -3344,7 +3364,7 @@ runUnitTests = function
 	assertEqual a.indexOfAny([")", "*"], 6), null
 	assertEqual a.indexOfAny([")", "*"], 6, -1), -1
 	assertEqual a.findCloseParen(1), 6
-		
+	
 	a = tokenize("PRINT LEFT$(A$,5), MID$(A$,LEN(A$)/2), RIGHT$(A$,F(X,4))")
 	assertEqual a.indexOfAnyParenSavvy(","), 6
 	assertEqual a.indexOfAnyParenSavvy(",", 1), 3
@@ -3382,9 +3402,9 @@ runUnitTests = function
 	assertEqual e.nextTokIdx, 5
 	
 	//args = getArguments(["FOO", 47, "-", 5, ",", """foo"""], 1)
-//	assertEqual args, [42, "foo"]
-//	args = getArguments(["FOO", 47, "-", 5, ",", """foo""", ":", "REM"], 1)
-//	assertEqual args, [42, "foo"]
+	//	assertEqual args, [42, "foo"]
+	//	args = getArguments(["FOO", 47, "-", 5, ",", """foo""", ":", "REM"], 1)
+	//	assertEqual args, [42, "foo"]
 	
 	if errorCount then exit
 end function
@@ -3398,18 +3418,18 @@ runMainLoop = function
 	machine.reset
 	cmd.HOME.run
 	runUnitTests
-
+	
 	print "MiniBASIC 0.9.7"
-
+	
 	globals.basic = function
 		reset
 		load "/usr/basic"
 		run
 	end function
 	_savedGlobals.basic = @basic
-
+	
 	cd "/usr/programs"
-
+	
 	// Main loop (invoking the REPL until done)
 	while true
 		if text.column > 0 then print
