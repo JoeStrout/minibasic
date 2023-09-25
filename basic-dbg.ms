@@ -34,7 +34,7 @@ isNumericChar = function(c)
 	return (c >= "0" and c <= "9")
 end function
 
-isIdentifierChar = function(c)	
+isIdentifierChar = function(c)
 	return (c >= "0" and c <= "9") or
 	  (c >= "A" and c <= "Z") or
 	  (c >= "a" and c <= "z") or
@@ -730,7 +730,6 @@ Parser.doBinop = function
 	op = self.popOperator
 	if machine.halt then return
 	opA = self.popValue
-	//print "doBinop: got " + op
 	if op == "+" then
 		self.pushValue SNAdd.make(opA, opB)
 	else if op == "-" then
@@ -1751,7 +1750,7 @@ cmd.EDIT.parse = function(tokens, startIdx, endIdx, address)
 	return result
 end function
 cmd.EDIT.run = function
-	if self.arg == null then return printErr("Line number required.")
+	if self.arg == null then return printErr("line number required.")
 	lineNum = self.arg.eval
 	if not machine.program.hasIndex(lineNum) then return printErr("invalid line number")
 	lineText = getLineAsText(lineNum, machine.program[lineNum])
@@ -2860,7 +2859,6 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	if not result then return
 	result.startTokenIdx = startIdx
 	if not result.hasIndex("endTokenIdx") then result.endTokenIdx = statementEnd
-	
 	return result
 end function
 
@@ -2915,7 +2913,9 @@ Machine.runProgram = function(startLineNum=0, clearData=true)
 end function
 
 //Debugger and other tools added by chinhouse
-// FIND - find a specific tokenized item
+// FIND - find a specific tokenized item, case insensitive search.
+//        Search for a specific string by enclosing it in quotes
+//        then search will be within literal strings.
 // FIND <token> [line range like in LIST/LISTREM]
 cmd.FIND = new Command; cmd.FIND._name = "cmd.FIND"
 cmd.FIND.parse = function(tokens, startIdx, endIx, address)
@@ -2927,21 +2927,42 @@ cmd.FIND.run = function
 	machine.sortLines
 	machine.findComeFroms
 	
-	// how to check that its syntax is correct?
 	_tokens = self.args[0]
 	startIdx = self.args[1]
 	endIx = self.args[2]
 	
-	if startIdx + 1 > _tokens.len - 1 then return printErr("Incomplete FIND statement.")
+	if startIdx + 1 > _tokens.len - 1 then return printErr("incomplete FIND statement.")
 	searchTerm = _tokens[startIdx + 1]
+	isString = searchTerm isa string
+	isQuoted = isString and searchTerm[0] == """"
+	isEmptyString = searchTerm == """"""
+	
+	if isQuoted and (searchTerm.len == 1 or searchTerm[-1] != """") then return printErr("incomplete string")
+	if isQuoted and not isEmptyString then searchTerm = searchTerm[1:-1]
+	if isString then searchTerm = searchTerm.lower
+	
 	lineRange = getRange(_tokens[startIdx + 2:endIx])
 	for lineNum in machine.lineNums
 		if lineNum < 0 then continue
 		if lineRange.from != null and lineNum < lineRange.from then continue
 		if lineRange.to != null and lineNum > lineRange.to then continue
-		tokens = machine.program[lineNum]
 		
-		if tokens.indexOf(searchTerm) == null then continue
+		tokens = machine.program[lineNum]
+		if isString and not isEmptyString then
+			wasFound = false
+			for i in range(0, tokens.len - 1)
+				curTok = tokens[i]
+				if curTok isa string then
+					curTok = curTok.lower
+					wasFound = isQuoted and curTok[0]== """" and curTok.indexOf(searchTerm) != null
+					wasFound += isString and searchTerm == curTok
+					if wasFound then break
+				end if
+			end for
+			if not wasFound then continue
+		else if tokens.indexOf(searchTerm) == null then
+			continue
+		end if
 		listOneLine lineNum, tokens
 	end for
 end function
@@ -2987,9 +3008,18 @@ end function
 // Along with BRKPOINT, I need better parameter checking
 //    are to be added.
 cmd.WATCH = new Command; cmd.WATCH._name = "cmd.WATCH"
-cmd.WATCH.parse = function(tokens, startIdx, endIdx, address)
+cmd.WATCH.parse = function (tokens, startIdx, endIdx, address)
+	args = tokens[startIdx + 1:endIdx]
+	retval = []
+	for arg in args
+		while arg isa string and arg.len > 0 and "-+".indexOf(arg[0]) != null
+			retval.push(arg[0])
+			arg = arg[1:]
+		end while
+		if arg != "" then retval.push(arg)
+	end for
 	result = new self
-	result.args = tokens[startIdx+1:endIdx]
+	result.args = retval
 	return result
 end function
 cmd.WATCH.run = function
@@ -3018,11 +3048,7 @@ end function
 //    BRKPOINT 10 - 20 + 100
 //    adds line 10, then removes line 20, then adds line 100
 cmd.BRKPOINT = new Command; cmd.BRKPOINT._name = "cmd.BRKPOINT"
-cmd.BRKPOINT.parse = function(tokens, startIdx, endIdx, address)
-	result = new self
-	result.args = tokens[startIdx+1:endIdx]
-	return result
-end function
+cmd.BRKPOINT.parse = @cmd.WATCH.parse
 cmd.BRKPOINT.run = function
 	parameters = self.args
 	addFlag = true
@@ -3033,6 +3059,9 @@ cmd.BRKPOINT.run = function
 		else if param == "-" then
 			addFlag = false
 		else
+			if param isa string then
+				param = param.val
+			end if
 			foundIdx = machine.debug.breakList.indexOf(param)
 			if addFlag and foundIdx == null then
 				machine.debug.breakList.push(param)
