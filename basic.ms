@@ -1212,10 +1212,14 @@ listOneLine = function(lineNum, tokens)
 			text.color = syntaxColor.colon
 			print space + tok + " ", ""
 			space = ""
-		else if tok == "," or tok == ";" or tok == "(" or tok == ")" then
+		else if tok == "," or tok == ";"then
 			text.color = syntaxColor.punctuation
 			print tok, ""
-			space = " " * (tok != "(")
+			space = " "
+		else if tok == "(" or tok == ")" then
+			text.color = syntaxColor.punctuation
+			print space * (tok == "(") + tok, ""
+			space = ""
 		else if tok[-1] == "(" then
 			id = tok[:-1]
 			if isStringId(id) then text.color = syntaxColor.string else text.color = syntaxColor.number
@@ -3116,7 +3120,7 @@ runMainLoop = function
 	cmd.HOME.run
 	runUnitTests
 
-	print "MiniBASIC 0.9.7"
+	print "MiniBASIC 0.9.8"
 
 	globals.basic = function
 		reset
