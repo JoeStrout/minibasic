@@ -1322,6 +1322,8 @@ printErr = function(err, addr)
 	if addr.lineIndex >= 0 and machine.lineNums.hasIndex(addr.lineIndex) and
 			machine.lineNums[addr.lineIndex] >= 0 then
 		loc = " in line " + addr.displayStr
+	else if machine.hasIndex("loadLoc") then
+		loc = " in " + machine.loadLoc
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
@@ -2494,9 +2496,11 @@ cmd.LOAD.run = function
 		print "Unable to read program " + self.path
 	else
 		machine.reset
-		for line in lines
-			repl line
+		for i in lines.indexes
+			machine.loadLoc = self.path + " line " + (i+1)
+			repl lines[i]
 		end for
+		machine.remove "loadLoc"
 		print machine.program.len + " lines loaded from " + self.path
 		machine.programPath = self.path	// ToDo: get full path
 	end if
