@@ -12,8 +12,8 @@ import "mathUtil"
 // Keywords, including all BASIC commands (but not including functions,
 // which are defined as part of the Machine class):
 keywords = "PRINT INPUT ON GOTO IF THEN ELSE FOR TO STEP NEXT END LET DIM REDIM DEF FN".split +
-  "GOSUB RETURN DATA READ RESTORE REM STOP".split +
-  "BREAK CLEAR CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
+  "GOSUB RETURN DATA READ RESTORE REM STOP USING".split +
+  "BREAK CALL CLEAR CLS HOME HTAB VTAB OFF GET WAIT SOUND OPEN CLOSE PRINT# INPUT# GET#".split +
   "COLOR LINE PLOT FILL RECT ELLIPSE POLY IMAGE PEN".split +
   "NEW LIST LISTREM CD PWD DIR CAT CATALOG LOAD SAVE RUN RENUMBER EDIT".split
 
@@ -232,6 +232,271 @@ inputOrControlC = function(prompt="")
 		yield
 	end while
 end function
+
+formatUsing = function(format, values)
+	result = []
+	valueIndex = 0
+	i = 0
+
+	while i < format.len
+		c = format[i]
+
+		// Check for string format specifiers
+		if c == "&" then
+			// Print entire string
+			if valueIndex < values.len then
+				result.push str(values[valueIndex])
+				valueIndex = valueIndex + 1
+			end if
+			i = i + 1
+		else if c == "!" then
+			// Print first character only
+			if valueIndex < values.len then
+				s = str(values[valueIndex])
+				if s.len > 0 then result.push s[0] else result.push " "
+				valueIndex = valueIndex + 1
+			end if
+			i = i + 1
+		else if c == "\" then
+			// Fixed-width string field: \  \ means 4 chars (backslashes plus spaces)
+			j = i + 1
+			while j < format.len and format[j] == " "
+				j = j + 1
+			end while
+			if j < format.len and format[j] == "\" then
+				// Found closing backslash
+				fieldWidth = j - i + 1
+				if valueIndex < values.len then
+					s = str(values[valueIndex])
+					// Center string in field (or truncate if too long)
+					if s.len < fieldWidth then
+						padding = fieldWidth - s.len
+						s += " " * padding
+					else if s.len > fieldWidth then
+						s = s[:fieldWidth]
+					end if
+					result.push s
+					valueIndex = valueIndex + 1
+				else
+					result.push " " * fieldWidth
+				end if
+				i = j + 1
+			else
+				// No closing backslash, treat as literal
+				result.push c
+				i = i + 1
+			end if
+		else if c == "#" or c == "0" or c == "+" or c == "$" or c == "*" then
+			// Numeric format - scan the whole format pattern
+			formatStart = i
+			formatEnd = i
+
+			// Scan for the extent of this numeric format
+			// A comma is only part of the format if followed by more digits
+			while formatEnd < format.len
+				ch = format[formatEnd]
+				if ch == "#" or ch == "0" or ch == "." or ch == "+" or ch == "$" or ch == "*" or ch == "^" then
+					formatEnd = formatEnd + 1
+				else if ch == "," or ch == "-" then
+					// Check if this is within the number format or a separator/trailing sign
+					// Look ahead to see if there are more digit chars
+					hasMoreDigits = 0
+					for j in range(formatEnd + 1, format.len - 1, 1)
+						if format[j] == "#" or format[j] == "0" then
+							hasMoreDigits = 1
+							break
+						else if format[j] != "." and format[j] != "," and format[j] != " " then
+							break
+						end if
+					end for
+					if hasMoreDigits then
+						formatEnd = formatEnd + 1
+					else if ch == "-" and formatEnd == format.len - 1 then
+						// Trailing minus sign - include it in the format
+						formatEnd = formatEnd + 1
+						break
+					else
+						break
+					end if
+				else
+					break
+				end if
+			end while
+
+			numFormat = format[formatStart:formatEnd]
+			if valueIndex < values.len then
+				result.push formatNumber(numFormat, values[valueIndex])
+				valueIndex = valueIndex + 1
+			end if
+			i = formatEnd
+		else
+			// Literal character
+			result.push c
+			i = i + 1
+		end if
+	end while
+
+	return result.join("")
+end function
+
+formatNumber = function(format, value)
+	// Parse format string
+	leadingSign = (format.indexOf("+") == 0)
+	trailingSign = (format.indexOf("-") == format.len - 1)
+	dollarSign = format.indexOf("$$") != null
+	asteriskFill = format.indexOf("**") != null
+
+	// Remove special prefix/suffix chars to find digit pattern
+	digitPattern = format
+	if leadingSign then digitPattern = digitPattern[1:]
+	if trailingSign then digitPattern = digitPattern[:-1]
+
+	// Check for fixed dollar sign (single $ at start, after removing +/-)
+	fixedDollarSign = (digitPattern.len > 0 and digitPattern[0] == "$" and not dollarSign)
+	if fixedDollarSign then digitPattern = digitPattern[1:]
+
+	digitPattern = digitPattern.replace("$$", "")
+	digitPattern = digitPattern.replace("**", "")
+
+	// Find decimal point
+	decimalPos = digitPattern.indexOf(".")
+	if decimalPos == null then decimalPos = digitPattern.len
+
+	// Count decimal places
+	decimalPlaces = 0
+	if decimalPos < digitPattern.len then
+		decimalPlaces = digitPattern.len - decimalPos - 1
+	end if
+
+	// Format the number
+	num = value
+	isNegative = (num < 0)
+	if isNegative then num = -num
+
+	// Round to decimal places
+	if decimalPlaces > 0 then
+		multiplier = 10 ^ decimalPlaces
+		num = round(num * multiplier) / multiplier
+	else
+		num = round(num)
+	end if
+
+	// Split into integer and decimal parts
+	numStr = str(num)
+	parts = numStr.split(".")
+	intPart = parts[0]
+	decPart = ""
+	if parts.len > 1 then decPart = parts[1]
+
+	// Pad decimal part
+	while decPart.len < decimalPlaces
+		decPart = decPart + "0"
+	end while
+
+	// Determine how many integer digit positions we need (excluding commas)
+	intDigits = 0
+	for i in range(0, decimalPos - 1, 1)
+		if digitPattern[i] == "#" or digitPattern[i] == "0" then
+			intDigits = intDigits + 1
+		end if
+	end for
+
+	// Reserve space for leading sign (reduce digits to make room)
+	if leadingSign and intDigits > 0 then intDigits = intDigits - 1
+	// For $$ and **, handle based on combination
+	if dollarSign and asteriskFill then
+		// Combined: $$ (2 chars) + ** (2 chars) = 4 chars in format
+		// Output: $ + * + digits, so add 2 positions total
+		intDigits = intDigits + 2
+	else if dollarSign then
+		// $$ alone: add 1 position ($ replaces one fill char)
+		intDigits = intDigits + 1
+	else if asteriskFill then
+		// ** alone: add 2 positions (asterisks are fill, need full width)
+		intDigits = intDigits + 2
+	end if
+	// Note: trailing sign doesn't reduce intDigits since it comes after the number
+
+	// Determine fill character (first # or 0 in integer part)
+	fillChar = " "
+	for i in range(0, decimalPos - 1, 1)
+		if digitPattern[i] == "#" then
+			fillChar = " "
+			break
+		else if digitPattern[i] == "0" then
+			fillChar = "0"
+			break
+		end if
+	end for
+	if asteriskFill then fillChar = "*"
+
+	// Pad integer part
+	while intPart.len < intDigits
+		intPart = fillChar + intPart
+	end while
+
+	// Add commas if needed
+	if digitPattern.indexOf(",") != null then
+		newIntPart = ""
+		digitCount = 0
+		for i in range(intPart.len - 1, 0, -1)
+			if digitCount > 0 and digitCount % 3 == 0 then
+				newIntPart = "," + newIntPart
+			end if
+			newIntPart = intPart[i] + newIntPart
+			digitCount = digitCount + 1
+		end for
+		intPart = newIntPart
+	end if
+
+	// Combine parts
+	if decimalPlaces > 0 then numStr = intPart + "." + decPart else numStr = intPart
+
+	// Add fixed dollar sign (goes at the very beginning)
+	if fixedDollarSign then numStr = "$" + numStr
+
+	// Add floating dollar sign (goes before first digit or before asterisks)
+	if dollarSign then
+		idx = 0
+		// When combined with **, the $ goes before the *, so only skip spaces and zeros
+		if asteriskFill then
+			while idx < numStr.len and (numStr[idx] == " " or numStr[idx] == "0")
+				idx += 1
+			end while
+		else
+			while idx < numStr.len and (numStr[idx] == " " or numStr[idx] == "*" or numStr[idx] == "0")
+				idx += 1
+			end while
+		end if
+		if idx > 0 then
+			numStr = numStr[:idx-1] + "$" + numStr[idx:]
+		else
+			numStr = "$" + numStr
+		end if
+	end if
+
+	// Add sign
+	if leadingSign then
+		if isNegative then numStr = "-" + numStr else numStr = "+" + numStr
+	else if trailingSign then
+		// Trailing sign format - always add a character
+		if isNegative then numStr = numStr + "-" else numStr = numStr + " "
+	else if isNegative then
+		// Floating minus sign - insert before first digit
+		idx = 0
+		while idx < numStr.len and (numStr[idx] == " " or numStr[idx] == "*" or numStr[idx] == "0" or numStr[idx] == "$")
+			idx = idx + 1
+		end while
+		if idx > 0 then
+			numStr = numStr[:idx-1] + "-" + numStr[idx:]
+		else
+			numStr = "-" + numStr
+		end if
+	end if
+
+	return numStr
+end function
+
 
 //======================================================================
 // A little class to represent a "statement address" we can jump to
@@ -1575,6 +1840,19 @@ cmd.BREAK.run = function(tokens, startIdx, endIdx)
 	while controlCPressed; yield; end while
 end function
 
+cmd.CALL = new Command; cmd.CALL._name = "cmd.CALL"
+cmd.CALL.parse = function(tokens, startIdx, endIdx, address)
+	args = tokens[startIdx+1:endIdx]
+	if args.len > 1 and args[0] == "-" then args = ["-" + args[1]] + args[2:]
+	if args.len != 1 then return printErr("invalid arguments to CALL")
+	result = new cmd.CALL
+	if args then result.addr = args[0] else result.addr = null
+	return result
+end function
+cmd.CALL.run = function(tokens, startIdx, endIdx)
+	printErr "CALL not supported"
+end function
+
 cmd.CD = new Command; cmd.CD._name = "cmd.CD"
 cmd.CD.parse = function(tokens, startIdx, endIdx, address)
 	args = tokens[startIdx+1:endIdx]
@@ -2398,15 +2676,16 @@ end function
 
 cmd.PRINT = new Command; cmd.PRINT._name = "cmd.PRINT"
 cmd.PRINT.parse = function(tokens, startIdx, endIdx, address)
-	// print a series of expressions, separated by , or ; or even just whitespace.
+	// Print a series of expressions, separated by , or ; or even just whitespace.
+	// Optionally, if first token is USING, then do PRINT USING formatting behavior.
 	result = new cmd.PRINT
 	result.args = []
-	result.delims = []
+	result.delims = []	
 	fileAndPos = getFile(tokens, startIdx)
 	if fileAndPos == null then return
 	result.fileId = fileAndPos[0]
 	pos = fileAndPos[1]
-	
+		
 	needEOL = true
 	eval = Parser.make(tokens, pos, endIdx)
 	
@@ -2452,6 +2731,18 @@ cmd.PRINT.run = function
 		f = machine.files[fileId]
 	end if
 	i = -1
+	if self.args and self.args[0] isa SNIdentifier and self.args[0].ident == "USING" then
+		// PRINT USING
+		args = []
+		for i in range(2, self.args.len-1, 1)
+			args.push self.args[i].eval
+		end  for
+//		print "formatUsing(" + self.args[1].eval + ", " + args + ")"
+		s = formatUsing(self.args[1].eval, args)
+		if self.delims then s += self.delims[-1]
+		if f then f.write s else print s, ""
+		return
+	end if
 	for i in self.args.indexes
 		if f then
 			f.write self.args[i].eval; f.write self.delims[i]
@@ -3000,9 +3291,9 @@ Machine.findComeFroms = function
 	for kv in self.program
 		lineNum = kv.key
 		line = kv.value
-		for i in range(0, line.len-2)
+		for i in range(0, line.len-2, 1)
 			if line[i] == "GOTO" or line[i] == "GOSUB" then
-				for j in range(i+1, line.len-1)
+				for j in range(i+1, line.len-1, 1)
 					target = line[j]
 					if target == ":" then break
 					if target isa number then self.comeFrom[target] = self.comeFrom.get(target, []) + [lineNum]
@@ -3049,7 +3340,7 @@ runUnitTests = function
 			globals.expected = expected
 		end if
 	end function
-
+	
 	assertEqual tokenize("10print""Hello""+42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("10 ?""Hello""  +   42"), [10, "PRINT", """Hello""", "+", 42]
 	assertEqual tokenize("5-2"), [5, "-", 2]
@@ -3065,7 +3356,7 @@ runUnitTests = function
 	assertEqual a.indexOfAny([")", "*"], 6), null
 	assertEqual a.indexOfAny([")", "*"], 6, -1), -1
 	assertEqual a.findCloseParen(1), 6
-		
+	
 	a = tokenize("PRINT LEFT$(A$,5), MID$(A$,LEN(A$)/2), RIGHT$(A$,F(X,4))")
 	assertEqual a.indexOfAnyParenSavvy(","), 6
 	assertEqual a.indexOfAnyParenSavvy(",", 1), 3
@@ -3103,9 +3394,9 @@ runUnitTests = function
 	assertEqual e.nextTokIdx, 5
 	
 	//args = getArguments(["FOO", 47, "-", 5, ",", """foo"""], 1)
-//	assertEqual args, [42, "foo"]
-//	args = getArguments(["FOO", 47, "-", 5, ",", """foo""", ":", "REM"], 1)
-//	assertEqual args, [42, "foo"]
+	//	assertEqual args, [42, "foo"]
+	//	args = getArguments(["FOO", 47, "-", 5, ",", """foo""", ":", "REM"], 1)
+	//	assertEqual args, [42, "foo"]
 	
 	if errorCount then exit
 end function
@@ -3119,18 +3410,18 @@ runMainLoop = function
 	machine.reset
 	cmd.HOME.run
 	runUnitTests
-
+	
 	print "MiniBASIC 0.9.8"
-
+	
 	globals.basic = function
 		reset
 		load "/usr/basic"
 		run
 	end function
 	_savedGlobals.basic = @basic
-
+	
 	cd "/usr/programs"
-
+	
 	// Main loop (invoking the REPL until done)
 	while true
 		if text.column > 0 then print
