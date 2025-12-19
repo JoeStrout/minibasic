@@ -1327,7 +1327,7 @@ printErr = function(err, addr)
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
-	pprint stackTrace; exit
+//	pprint stackTrace; exit
 end function
 
 getValue = function(identifier, customLocals=null)
@@ -1778,7 +1778,14 @@ Machine.fn.RND = function(n)
 end function
 Machine.fn.SGN = function(n); if requireNum(n) then return sign(n); end function
 Machine.fn.SIN = function(n); if requireNum(n) then return sin(n); end function
-Machine.fn["SPACE$"] = function(n); if requireNum(n) then return " "*n; end function
+Machine.fn["SPACE$"] = function(n); if requireNum(n) then return " "*n; return ""; end function
+Machine.fn["STRING$"] = function(args)
+	if not args isa list or len(args) != 2 then return printErr("invalid arguments to STRING$")
+	n = args[0]; c = args[1]
+	if c isa number then c = char(c)
+	if requireNum(n) then return c*n
+	return ""
+end function
 Machine.fn.SPC = function(n); if requireNum(n) then print " "*n,""; return ""; end function
 Machine.fn.SQR = function(n); if requireNum(n) then return sqrt(n); end function
 Machine.fn["STR$"] = function(n); if requireNum(n) then return str(n); end function
@@ -1868,6 +1875,12 @@ cmd.CD.run = function(tokens, startIdx, endIdx)
 end function
 
 cmd.CLEAR = new Command; cmd.CLEAR._name = "cmd.CLEAR"
+cmd.CLEAR.parse = function(tokens, startIdx, endIdx, address)
+	// Allow an argument (bytes to reserve), though we ignore it.
+	args = getArguments(tokens, startIdx+1, endIdx)
+	if args and args.len > 1 then return printErr("syntax error in CLEAR command")
+	return new self
+end function
 cmd.CLEAR.run = function
 	machine.vars = {}
 	machine.arrs = {}

@@ -57,6 +57,7 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | SPC(_n_) | immediately prints _n_ space characters, then returns "" |
 | SQR(_n_) | square root of _n_ |
 | STR$(_n_) | converts number _n_ into a string using standard formatting |
+| STRING$(_n_, _c_) | a string composed of _n_ repeats of _c_ or CHR$(_c_) |
 | TAB(_n_ \[, _m_\]) | given both _n_ and _m_, moves text cursor to row _m_, column _n_; given only _n_, advances the text cursor to column _n_ only if it is currently less than that; returns "" |
 | TAN(_n_) | tangent of _n_ radians |
 | TIME(_n_) | for _n_=0, time in seconds since system start; _n_=1, time since current run |
