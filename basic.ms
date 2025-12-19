@@ -1327,7 +1327,7 @@ printErr = function(err, addr)
 	end if
 	print char(7) + "Error: " + err + loc
 	machine.halt = true
-//	pprint stackTrace; exit
+	pprint stackTrace; exit
 end function
 
 getValue = function(identifier, customLocals=null)
@@ -3042,6 +3042,16 @@ cmd.SOUND.run = function
 	snd.play
 end function
 
+cmd.UNKNOWN = new Command; cmd.UNKNOWN._name = "cmd.UNKNOWN"
+cmd.UNKNOWN.parse = function(tokens, startIdx, endIdx, address)
+	result = new self
+	result.cmd = tokens[startIdx]
+	return result
+end function
+cmd.UNKNOWN.run = function
+	printErr "Command not found: " + self.cmd
+end function
+
 cmd.VTAB = new Command; cmd.VTAB._name = "cmd.VTAB"
 cmd.VTAB.parse = function(tokens, startIdx, endIdx, address)
 	result = new self
@@ -3142,10 +3152,7 @@ Machine.compileStatement = function(tokens, startIdx, address)
 	statementEnd = tokens.indexOfAny([":","THEN","ELSE"], startIdx)
 	if statementEnd == null then statementEnd = tokens.len
 	cmdObj = cmd.get(cmdName)
-	if cmdObj == null then
-		printErr "Command not found: " + cmdName, address
-		return null
-	end if
+	if cmdObj == null then cmdObj = cmd.UNKNOWN
 	result = cmdObj.parse(tokens, startIdx, statementEnd, address)
 	if not result then return
 	result.startTokenIdx = startIdx
