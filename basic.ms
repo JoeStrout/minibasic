@@ -3435,7 +3435,7 @@ runMainLoop = function
 	cmd.HOME.run
 	runUnitTests
 	
-	print "MiniBASIC 0.9.8"
+	print "MiniBASIC 0.9.9"
 	
 	globals.basic = function
 		reset
