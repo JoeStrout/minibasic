@@ -107,7 +107,7 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | RETURN | pops the most recent program location off the RETURN stack (as set by GOSUB), and jumps to that location |
 | SOUND [_freq_, _dur_, _vol_, _wave_] | synthesizes a sound with the given parameters: frequency, in Hz if > 0 or in negative MIDI note numbers if <= 0 (default 440 Hz); duration in seconds (default 0.5); volume 0-1 (default 1), and waveform (0=sine, 1=triangle, 2=sawtooth, 3=square, 4=noise, default 1).  Sound is played asynchronously.  Frequency and volume may be given an array (with no index, e.g. `F()`) instead of a scalar value; in this case, the sound interpolates over the values in the array linearly over the duration of the sound |
 | STOP | halts the current program and returns to the MiniBASIC prompt; synonym for END |
-| VTAB _n_ | moves the text cursor to row _n_ (1-25, with 1 at the top); see also HTAB |
+| VTAB _n_ | moves the text cursor to row _n_ (1-26, with 1 at the top); see also HTAB |
 | WAIT \[_n_] | pauses the program for _n_ seconds (default 1) before proceeding with the next statement
 
 ## Shell Commands
