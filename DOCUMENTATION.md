@@ -186,7 +186,7 @@ Any character not one of the above is printed as-is, i.e., is not part of the fo
 |`PRINT USING "#####"; 42` | `   42` |
 |`PRINT USING "##.##"; PI` | ` 3.14` |
 |`PRINT USING "\   \"; "Hey"` | `Hey  ` (with trailing spaces) |
-|`PRINT USING ">&<"; "Hello" | `>Hello<` |
+|`PRINT USING ">&<"; "Hello"` | `>Hello<` |
 
 
 ### File I/O
