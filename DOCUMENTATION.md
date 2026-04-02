@@ -167,6 +167,8 @@ Please see the program **demo/sounds** for examples showing use of the SOUND com
 
 MiniBASIC's PRINT USING allows for simple formatting of numbers and strings, using special characters in the first argument (the format string).  In the table below, the first three rows apply to any value (converted to string as needed), while the remaining rows apply only to numeric values.
 
+| Code | Meaning |
+|---|---|
 | `&` | print entire string |
 | `!` | print first character of a string |
 | `\  \` | fixed-width field; print _n_ characters, where _n_ is the number of spaces plus 2 (for the backslashes) |
