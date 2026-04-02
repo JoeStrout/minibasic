@@ -99,14 +99,15 @@ The following table lists all MiniBASIC commands.  A command is used as a statem
 | PEN _size_ | changes the pen sized used with PLOT and LINE, as well as RECT, ELLIPSE, and POLY when FILL is OFF; value must be >= 0 |
 | PLOT _x_, _y_ | plots pixel _x_ (0-959, measured from left side of screen) by _y_ (0-639, measured from bottom of screen) in the current COLOR, and sets the plot position used with subsequent drawing; may also take arrays to plot multiple points |
 | POLY _x()_, _y()_ | draws or fills a polygon defined by arrays _x()_ and _y()_, updating the plot position to the last point in the arrays |
-| PRINT \[_expr_, _expr_, ...] | prints zero or more expressions to the text display.  Expressions may be separated by `,`, `;`, or whitespace; a `,` will print a comma, while `;` or whitespace results in no additional space printed.  If the list of expressions does not end with `,`, `;`, or TAB(), then a line break is printed after the last expression.  PRINT may be abbreviated `?` |
+| PRINT \[_expr_, _expr_, ...\] | prints zero or more expressions to the text display.  Expressions may be separated by `,`, `;`, or whitespace; a `,` will print a comma, while `;` or whitespace results in no additional space printed.  If the list of expressions does not end with `,`, `;`, or TAB(), then a line break is printed after the last expression.  PRINT may be abbreviated `?` |
+| PRINT USING _format_, \[_expr_, _expr_, ...\] | formats values according to the given format spec; see PRINT USING topic below for details. |
 | READ _var_ \[, _var2_, ...] | reads the next DATA term into the given variable. Any number of variables may be specified, separated by `,`, to be read in order.  Generates an error if there is insufficient DATA left to be read.  See also RESTORE |
 | RECT \[_x1_, _y1_ TO\] _x2_, _y2_ | draws or fills a rectangle from _x1_, _y1_ (or the current plot position) to position _x2_, _y2_ in the current COLOR, and updates the plot position to _x2_, _y2_ |
 | REDIM _name_(_n_ \[,_m_ ...\]) | declares an array with valid indexes from 0 to _n_ inclusive, or a multidimensional array with additional dimensions _m_, etc.  Acts just like DIM except that it does not throw an error if the array already exists; in such a case, the previous data is lost as the new array is always cleared |
 | REM _text_ | creates a "remark" or comment in the program; any text between REM and the line break is ignored by MiniBASIC.  Note that if REM is the first statement on a line, then it will be included in the output of the LISTREM command |
 | RESTORE \[_lineNum_] | resets the DATA pointer (i.e., the next datum read by the READ command) to the first DATA at or after the given _lineNum_, or if no line number is given, then the first DATA in the program |
 | RETURN | pops the most recent program location off the RETURN stack (as set by GOSUB), and jumps to that location |
-| SOUND [_freq_, _dur_, _vol_, _wave_] | synthesizes a sound with the given parameters: frequency, in Hz if > 0 or in negative MIDI note numbers if <= 0 (default 440 Hz); duration in seconds (default 0.5); volume 0-1 (default 1), and waveform (0=sine, 1=triangle, 2=sawtooth, 3=square, 4=noise, default 1).  Sound is played asynchronously.  Frequency and volume may be given an array (with no index, e.g. `F()`) instead of a scalar value; in this case, the sound interpolates over the values in the array linearly over the duration of the sound |
+| SOUND [_freq_, _dur_, _vol_, _wave_] | synthesizes a sound with the given parameters and plays it asynchronously.  (See "Sound" topic below.) |
 | STOP | halts the current program and returns to the MiniBASIC prompt; synonym for END |
 | VTAB _n_ | moves the text cursor to row _n_ (1-26, with 1 at the top); see also HTAB |
 | WAIT \[_n_] | pauses the program for _n_ seconds (default 1) before proceeding with the next statement
@@ -149,9 +150,44 @@ Please see the program **demo/drawing** for examples of how to use the drawing c
 
 ### Sound
 
-MiniBASIC supports a sophisticated synthesized sound system, including four different waveforms, and the ability to interpolate pitch and/or volume over the course of a sound.  All sounds are played asynchronously.
+MiniBASIC supports a sophisticated synthesized sound system, including four different waveforms, and the ability to interpolate pitch and/or volume over the course of a sound.  All sounds are played asynchronously.  The command is:
+
+`SOUND [freq, dur, vol, wave]`
+
+- `freq`: frequency, in Hz if > 0 or in negative MIDI note numbers if <= 0.  If not specified, the default value is 440 Hz.
+- `dur`: duration in seconds; default is 0.5 sec.
+- `vol`: volume from 0 (silent) to 1 (maximum); default is 1.
+- `wave`: waveform, where 0=sine, 1=triangle, 2=sawtooth, 3=square, 4=noise; default is 1.
+
+Frequency and volume may be given an array (with no index, e.g. `F()`) instead of a scalar value; in this case, the sound interpolates over the values in the array linearly over the duration of the sound, allowing for sophisticated sounds with dynamic pitch and intensity.
 
 Please see the program **demo/sounds** for examples showing use of the SOUND command.
+
+### PRINT USING
+
+MiniBASIC's PRINT USING allows for simple formatting of numbers and strings, using special characters in the first argument (the format string).  In the table below, the first three rows apply to any value (converted to string as needed), while the remaining rows apply only to numeric values.
+
+| `&` | print entire string |
+| `!` | print first character of a string |
+| `\  \` | fixed-width field; print _n_ characters, where _n_ is the number of spaces plus 2 (for the backslashes) |
+| `#` | print a digit if it is needed, else print a space |
+| `0` | print a digit in any case (including leading zeros) |
+| `.` | print a decimal point |
+| `,` | include thousands separators |
+| `+` | print the sign (`+` or `-`) |
+| `-` | print "-" (always) |
+| `$` | print "$" |
+
+Any character not one of the above is printed as-is, i.e., is not part of the format specifier.  Examples:
+
+| BASIC code | Output |
+|---|---|
+|`PRINT USING "00000"; 42` | `00042` |
+|`PRINT USING "#####"; 42` | `   42` |
+|`PRINT USING "##.##"; PI` | ` 3.14` |
+|`PRINT USING "\   \"; "Hey"` | `Hey  ` (with trailing spaces) |
+|`PRINT USING ">&<"; "Hello" | `>Hello<` |
+
 
 ### File I/O
 
