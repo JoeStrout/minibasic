@@ -37,13 +37,14 @@ The following built-in functions are available in MiniBASIC.  These must be used
 | CHR$(_n_) | character with the Unicode code point _n_; inverse of ASC |
 | COS(_n_) | cosine of _n_ radians |
 | EOF(_n_) | return whether file handle _n_ is at end-of-file |
-| EXP(_n_) | [e](https://en.wikipedia.org/wiki/E_(mathematical_constant))^_n_ |
+| EXP(_n_) | [e](https://en.wikipedia.org/wiki/E_(mathematical_constant))^_n_; inverse of LOG |
 | FIX(_n_) | integer portion of _n_, i.e., whole number neighboring _n_ closest to 0 |
 | INKEY$(_z_) | pulls and returns the first character waiting in the keyboard buffer, if any, else returns "" |
 | INT(_n_) | next integer equal to or less than _n_ (generally called _floor_ in other languages) |
 | INSTR(\[_start_,] _a$_, _b$_) | 1-based index of substring _b$_ within _a$_, optionally starting at _start_; 0 if not found |
 | LEFT$(_a$_, _n_) | leftmost _n_ characters of string _a$_; see also MID$, RIGHT$ |
 | LEN(_a$_) | length of (i.e. number of characters in) _a$_ |
+| LOG(_n_) | natural logarithm of _n_; inverse of EXP |
 | LOWER$(_s_) | string _s_ converted to lowercase; see also UPPER$ |
 | MID$(_a$_, _n_ \[, _m_\]) | substring of _a$_ starting at _n_ and containing up to _m_ characters; if _m_ is not specified, returns the rest of _a$_ |
 | PIXEL(_x_,_y_) | returns the color of the graphics layer at pixel _x_, _y_, as a number 0-15 corresponding to the COLOR palette; returns -1 if pixel color is not in the palette |
